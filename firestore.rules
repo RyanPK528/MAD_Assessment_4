@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User profiles: Each user can read and update their own profile only.
+    match /users/{userId} {
+      allow read: if request.auth.uid == userId;
+      allow create: if request.auth.uid == userId &&
+                       request.resource.data.uid == request.auth.uid &&
+                       request.resource.data.email == request.auth.token.email &&
+                       request.resource.data.grade > 0;
+      allow update: if request.auth.uid == userId &&
+                       (request.resource.data.groupId == null || 
+                        existsAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)));
+    }
+
+    // Groups: Members can read their own group. Requires grade level match.
+    match /groups/{groupId} {
+      allow read: if request.auth != null &&
+                     request.auth.uid in resource.data.memberIds;
+      allow create: if request.auth != null &&
+                       request.resource.data.grade > 0 &&
+                       request.resource.data.memberIds[0] == request.auth.uid;
+      allow update: if request.auth != null &&
+                       request.auth.uid in resource.data.memberIds;
+    }
+
+    // Leaderboard: Public read access to encourage engagement.
+    match /leaderboard/{document=**} {
+      allow read: if request.auth != null;
+    }
+
+    // Deny all other access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

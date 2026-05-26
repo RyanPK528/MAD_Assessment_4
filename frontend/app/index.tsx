@@ -1,61 +1,34 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
+import { Link } from 'expo-router';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
 
 export default function HomeScreen() {
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
+        <ThemedText type="title" style={styles.title}>
+          STEMM Lab
+        </ThemedText>
+        <ThemedText type="body" style={styles.subtitle}>
+          A mobile science lab experience for students in the Expo managed workflow.
         </ThemedText>
 
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
+        <View style={styles.actionGrid}>
+          <Link href="/login" style={styles.actionButton}>
+            <ThemedText type="button">Log In</ThemedText>
+          </Link>
+          <Link href="/signup" style={styles.actionButtonSecondary}>
+            <ThemedText type="button">Sign Up</ThemedText>
+          </Link>
+        </View>
 
-        {Platform.OS === 'web' && <WebBadge />}
+        <ThemedText type="small" style={styles.hintText}>
+          Use STEMM Lab to register, join a group, and track sensor-driven science challenges.
+        </ThemedText>
       </SafeAreaView>
     </ThemedView>
   );
@@ -65,34 +38,47 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     justifyContent: 'center',
-    flexDirection: 'row',
+    paddingHorizontal: Spacing.four,
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: Spacing.four,
+    justifyContent: 'center',
     alignItems: 'center',
     gap: Spacing.three,
     paddingBottom: BottomTabInset + Spacing.three,
     maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
+    width: '100%',
   },
   title: {
     textAlign: 'center',
+    marginBottom: Spacing.two,
   },
-  code: {
-    textTransform: 'uppercase',
+  subtitle: {
+    textAlign: 'center',
+    marginBottom: Spacing.four,
   },
-  stepContainer: {
+  actionGrid: {
+    width: '100%',
     gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
+    alignItems: 'center',
+  },
+  actionButton: {
+    width: '100%',
+    padding: Spacing.four,
+    borderRadius: Spacing.three,
+    backgroundColor: '#1B82D1',
+    alignItems: 'center',
+  },
+  actionButtonSecondary: {
+    width: '100%',
+    padding: Spacing.four,
+    borderRadius: Spacing.three,
+    backgroundColor: '#2F2F3D',
+    alignItems: 'center',
+  },
+  hintText: {
+    marginTop: Spacing.four,
+    textAlign: 'center',
+    maxWidth: 480,
   },
 });
