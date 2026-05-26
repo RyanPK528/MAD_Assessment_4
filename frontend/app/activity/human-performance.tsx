@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, StyleSheet, View } from 'react-native';
 
-import { createMotionLabController, MotionLabState } from '../../../backend/services/motionLabService';
+import { createMotionLabController, MotionLabState } from '@/services/motionLabService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';

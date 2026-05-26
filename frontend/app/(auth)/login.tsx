@@ -1,11 +1,11 @@
 import { useRouter, Link } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 
-import { loginUser } from '../../../backend/controllers/authController';
+import { loginUser } from '../../services/authService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -14,12 +14,21 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    // eslint-disable-next-line no-console
+    console.log('[Login] Form submitted');
+    
     setLoading(true);
+    // eslint-disable-next-line no-console
+    console.log('[Login] Calling loginUser...');
     try {
       await loginUser({ email, password });
+      // eslint-disable-next-line no-console
+      console.log('[Login] Authentication successful, navigating to dashboard');
       router.push('/dashboard');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed.';
+      // eslint-disable-next-line no-console
+      console.error('[Login] Authentication error:', message);
       Alert.alert('Login error', message);
     } finally {
       setLoading(false);
@@ -51,7 +60,7 @@ export default function LoginScreen() {
         value={password}
       />
       <Pressable disabled={loading} onPress={handleLogin} style={styles.button}>
-        <ThemedText type="button">{loading ? 'Signing in…' : 'Sign In'}</ThemedText>
+        <ThemedText type="subtitle">{loading ? 'Signing in…' : 'Sign In'}</ThemedText>
       </Pressable>
       <Link href="/signup" style={styles.link}>
         <ThemedText type="small">Create an account</ThemedText>

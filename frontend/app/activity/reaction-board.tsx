@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, PanResponder, StyleSheet, TextInput, View } from 'react-native';
 
-import { createReactionBoardController, ReactionBoardState, TracePoint } from '../../../backend/services/reactionBoardService';
+import { createReactionBoardController, ReactionBoardState, TracePoint } from '@/services/reactionBoardService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';

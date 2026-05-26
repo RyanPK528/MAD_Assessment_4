@@ -1,5 +1,5 @@
-import { Link } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -7,23 +7,25 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 
 export default function HomeScreen() {
+  const router = useRouter();
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea}>
         <ThemedText type="title" style={styles.title}>
           STEMM Lab
         </ThemedText>
-        <ThemedText type="body" style={styles.subtitle}>
+        <ThemedText type="subtitle" style={styles.subtitle}>
           A mobile science lab experience for students in the Expo managed workflow.
         </ThemedText>
 
         <View style={styles.actionGrid}>
-          <Link href="/login" style={styles.actionButton}>
-            <ThemedText type="button">Log In</ThemedText>
-          </Link>
-          <Link href="/signup" style={styles.actionButtonSecondary}>
-            <ThemedText type="button">Sign Up</ThemedText>
-          </Link>
+          <Pressable onPress={() => router.push('/login')} style={styles.actionButton}>
+            <ThemedText type="subtitle" style={styles.buttonText}>Log In</ThemedText>
+          </Pressable>
+          <Pressable onPress={() => router.push('/signup')} style={styles.actionButtonSecondary}>
+            <ThemedText type="subtitle" style={styles.buttonText}>Sign Up</ThemedText>
+          </Pressable>
         </View>
 
         <ThemedText type="small" style={styles.hintText}>
@@ -80,5 +82,8 @@ const styles = StyleSheet.create({
     marginTop: Spacing.four,
     textAlign: 'center',
     maxWidth: 480,
+  },
+  buttonText: {
+    color: '#FFF',
   },
 });

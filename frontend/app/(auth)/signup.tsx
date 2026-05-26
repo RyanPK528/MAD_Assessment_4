@@ -1,11 +1,11 @@
 import { useRouter, Link } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
 
-import { registerUser } from '../../../backend/controllers/authController';
+import { registerUser } from '../../services/authService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, Spacing } from '@/constants/theme';
+import { Spacing } from '@/constants/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
@@ -16,18 +16,30 @@ export default function SignupScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
+    // eslint-disable-next-line no-console
+    console.log('[Signup] Form submitted');
+    
     const parsedGrade = Number(grade);
     if (!firstName.trim() || !email.trim() || !password.trim() || Number.isNaN(parsedGrade) || parsedGrade <= 0) {
-      Alert.alert('Registration error', 'Please fill every field and enter a valid grade level.');
+      const validationMsg = 'Please fill every field and enter a valid grade level.';
+      // eslint-disable-next-line no-console
+      console.log('[Signup] Validation failed:', validationMsg);
+      Alert.alert('Registration error', validationMsg);
       return;
     }
 
     setLoading(true);
+    // eslint-disable-next-line no-console
+    console.log('[Signup] Calling registerUser...');
     try {
       await registerUser({ email, password, firstName, grade: parsedGrade });
+      // eslint-disable-next-line no-console
+      console.log('[Signup] Registration successful, navigating to dashboard');
       router.push('/dashboard');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sign-up failed.';
+      // eslint-disable-next-line no-console
+      console.error('[Signup] Registration error:', message);
       Alert.alert('Sign-up error', message);
     } finally {
       setLoading(false);
@@ -73,7 +85,7 @@ export default function SignupScreen() {
         value={grade}
       />
       <Pressable disabled={loading} onPress={handleSignup} style={styles.button}>
-        <ThemedText type="button">{loading ? 'Creating account…' : 'Create Account'}</ThemedText>
+        <ThemedText type="subtitle">{loading ? 'Creating account…' : 'Create Account'}</ThemedText>
       </Pressable>
       <Link href="/login" style={styles.link}>
         <ThemedText type="small">Already registered? Log in</ThemedText>

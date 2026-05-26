@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, StyleSheet, View } from 'react-native';
 
-import { createBreathingTrainerController, BreathingTrainerState } from '../../../backend/services/breathingTrainerService';
+import { createBreathingTrainerController, BreathingTrainerState } from '@/services/breathingTrainerService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';

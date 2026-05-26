@@ -4,7 +4,7 @@ import * as Icons from 'expo-symbols';
 
 import { Colors } from '@/constants/theme';
 
-export default function AppTabs() {
+export default function TabsLayout() {
   const scheme = useColorScheme();
   const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
 
