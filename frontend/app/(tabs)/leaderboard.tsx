@@ -2,6 +2,7 @@ import { FlatList, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 
 const mockLeaderboard = [
@@ -13,26 +14,26 @@ const mockLeaderboard = [
 ];
 
 export default function LeaderboardScreen() {
+  const theme = useTheme();
+
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        Leaderboard
-      </ThemedText>
+    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
+      <ThemedText type="title" style={styles.title}>Leaderboard</ThemedText>
       <View style={styles.podiumRow}>
-        <View style={[styles.podiumCard, styles.second]}> 
+        <View style={[styles.podiumCard, styles.second, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
           <ThemedText type="subtitle">2</ThemedText>
           <ThemedText type="body">Group Orion</ThemedText>
-          <ThemedText type="small">71.4%</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>71.4%</ThemedText>
         </View>
-        <View style={[styles.podiumCard, styles.first]}>
+        <View style={[styles.podiumCard, styles.first, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
           <ThemedText type="subtitle">1</ThemedText>
           <ThemedText type="body">Team Nova</ThemedText>
-          <ThemedText type="small">85.7%</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>85.7%</ThemedText>
         </View>
-        <View style={[styles.podiumCard, styles.third]}>
+        <View style={[styles.podiumCard, styles.third, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
           <ThemedText type="subtitle">3</ThemedText>
           <ThemedText type="body">STEM Squad</ThemedText>
-          <ThemedText type="small">57.1%</ThemedText>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>57.1%</ThemedText>
         </View>
       </View>
 
@@ -40,23 +41,23 @@ export default function LeaderboardScreen() {
         data={mockLeaderboard.slice(3)}
         keyExtractor={(item) => String(item.rank)}
         renderItem={({ item }) => (
-          <View style={styles.rowItem}>
-            <View style={styles.rankBadge}>
+          <View style={[styles.rowItem, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+            <View style={[styles.rankBadge, { backgroundColor: theme.backgroundSelected }]}> 
               <ThemedText type="subtitle">{item.rank}</ThemedText>
             </View>
             <View style={styles.rankText}>
               <ThemedText type="body">{item.name}</ThemedText>
-              <ThemedText type="small">Grade {item.grade} • {item.completedActivitiesCount}/7</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>Grade {item.grade} • {item.completedActivitiesCount}/7</ThemedText>
             </View>
-            <ThemedText type="small">{item.completionPercent}%</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{item.completionPercent}%</ThemedText>
           </View>
         )}
-        ItemSeparatorComponent={() => <View style={styles.divider} />}
+        ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.border }]} />}
       />
 
-      <ThemedView style={styles.stickyStatus}>
+      <ThemedView style={[styles.stickyStatus, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
         <ThemedText type="subtitle">Your group</ThemedText>
-        <ThemedText type="body">Team Pulse • grade 10 • 4 / 7 complete • 57.1%</ThemedText>
+        <ThemedText type="body" style={{ color: theme.textSecondary }}>Team Pulse • grade 10 • 4 / 7 complete • 57.1%</ThemedText>
       </ThemedView>
     </ThemedView>
   );
@@ -81,23 +82,30 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: Spacing.three,
     padding: Spacing.four,
-    backgroundColor: '#1A1A26',
     alignItems: 'center',
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    elevation: 4,
   },
   first: {
     transform: [{ scale: 1.05 }],
   },
   second: {
-    opacity: 0.95,
+    opacity: 0.96,
   },
   third: {
-    opacity: 0.9,
+    opacity: 0.92,
   },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Spacing.three,
+    borderWidth: 1,
   },
   rankBadge: {
     width: 40,
@@ -105,7 +113,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#272732',
     marginRight: Spacing.three,
   },
   rankText: {
@@ -114,12 +121,15 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#2F2F3D',
   },
   stickyStatus: {
     padding: Spacing.four,
     borderRadius: Spacing.three,
-    backgroundColor: '#161620',
     marginTop: Spacing.four,
+    borderWidth: 1,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 5,
   },
 });

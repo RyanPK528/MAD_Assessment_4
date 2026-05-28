@@ -1,24 +1,32 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { getApps, initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence, type Auth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Try multiple sources for config values
-const extra = (Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}) as Record<string, string | undefined>;
-
-// Fallback to process.env for web platform or if extra is not available
+// Load Firebase config from environment with proper fallbacks
 const getConfigValue = (key: string): string => {
-  // First try extra from expoConfig
-  if (extra[key]) return extra[key];
-  // Then try process.env
+  // First: check if it's available in process.env (set by build system)
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
+    const value = process.env[key];
+    if (value) return value;
   }
-  // Last resort: try accessing from global scope (for web)
+  
+  // Second: try Constants.expoConfig?.extra (native/Expo Go)
+  let extra: Record<string, string | undefined> = {};
+  try {
+    extra = (Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}) as Record<string, string | undefined>;
+    if (extra[key]) return extra[key];
+  } catch (e) {
+    // Constants might not be available in all contexts
+  }
+  
+  // Third: try globalThis (web fallback)
   if (typeof globalThis !== 'undefined' && (globalThis as any)[key]) {
     return (globalThis as any)[key];
   }
+  
   return '';
 };
 
@@ -49,27 +57,25 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
 
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
 
-let firebaseAuth;
-try {
-  if (Platform.OS !== 'web') {
-    // Try to use react-native AsyncStorage for persistence if available
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+let firebaseAuth: Auth;
+if (Platform.OS !== 'web') {
+  try {
     // eslint-disable-next-line no-console
-    console.log('[Firebase] Initializing Auth with React Native persistence...');
-    firebaseAuth = initializeAuth(app, { persistence: getReactNativePersistence(AsyncStorage) });
+    console.log('[Firebase] Initializing Auth on native platform with AsyncStorage persistence...');
+    firebaseAuth = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
     // eslint-disable-next-line no-console
-    console.log('[Firebase] Auth initialized with persistence');
-  } else {
+    console.log('[Firebase] Native Auth initialized');
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
     // eslint-disable-next-line no-console
-    console.log('[Firebase] Web platform detected, using getAuth()');
+    console.warn('[Firebase] Native auth initialization failed; falling back to getAuth().', message);
     firebaseAuth = getAuth(app);
   }
-} catch (e) {
-  // Fallback to default getAuth if AsyncStorage is not installed or initialization fails
-  // This will keep auth in memory only.
+} else {
   // eslint-disable-next-line no-console
-  console.warn('[Firebase] Auth React Native persistence not available, falling back to memory persistence.', e instanceof Error ? e.message : e);
+  console.log('[Firebase] Web platform detected, using getAuth()');
   firebaseAuth = getAuth(app);
 }
 

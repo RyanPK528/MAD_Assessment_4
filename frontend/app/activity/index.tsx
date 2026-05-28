@@ -13,7 +13,7 @@ const activities = [
   { id: 'sound-pollution', label: 'Sound Pollution Hunter', href: '/activity/sound-pollution' },
   { id: 'hand-fan', label: 'Hand Fan Challenge', href: '/activity/hand-fan' },
   { id: 'earthquake-structure', label: 'Earthquake-Resistant Structure', href: '/activity/earthquake-structure' },
-];
+] as const;
 
 export default function ActivityIndexScreen() {
   return (

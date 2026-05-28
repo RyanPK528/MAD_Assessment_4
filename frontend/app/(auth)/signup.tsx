@@ -34,8 +34,8 @@ export default function SignupScreen() {
     try {
       await registerUser({ email, password, firstName, grade: parsedGrade });
       // eslint-disable-next-line no-console
-      console.log('[Signup] Registration successful, navigating to dashboard');
-      router.push('/dashboard');
+      console.log('[Signup] Registration successful, redirecting to group management');
+      router.push('/group-management');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sign-up failed.';
       // eslint-disable-next-line no-console

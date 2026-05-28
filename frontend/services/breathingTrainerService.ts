@@ -1,5 +1,5 @@
 import { Accelerometer } from 'expo-sensors';
-import type { Subscription } from 'expo-sensors';
+import { Platform } from 'react-native';
 
 export type BreathingPhase = 'Resting' | 'PostExercise1' | 'PostExercise2';
 
@@ -25,7 +25,7 @@ const detectBreathPeaks = (samples: number[]): number => {
 };
 
 export function createBreathingTrainerController(onUpdate: (state: BreathingTrainerState) => void) {
-  let subscription: Subscription | null = null;
+  let subscription: ReturnType<typeof Accelerometer.addListener> | null = null;
   let phase: BreathingPhase = 'Resting';
   let secondsElapsed = 0;
   let breathSamples: number[] = [];
@@ -69,6 +69,21 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingTrai
     breathCount = 0;
     breathSamples = [];
     phase = 'Resting';
+
+    // Sensors not available on web
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-console
+      console.warn('[BreathingTrainer] Accelerometer not available on web platform');
+      intervalHandle = setInterval(() => {
+        secondsElapsed += 1;
+        if (secondsElapsed === 20 || secondsElapsed === 40 || secondsElapsed === 60) {
+          advancePhase();
+        }
+        publish();
+      }, 1000);
+      publish();
+      return;
+    }
 
     Accelerometer.setUpdateInterval(200);
     subscription = Accelerometer.addListener((acceleration) => {

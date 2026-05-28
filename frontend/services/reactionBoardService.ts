@@ -1,126 +1,100 @@
-import { Accelerometer } from 'expo-sensors';
-import type { Subscription } from 'expo-sensors';
-
-export type ReactionStage = 'tap' | 'swap' | 'trace' | 'complete';
-
-export interface TracePoint {
-  x: number;
-  y: number;
-  timestamp: number;
-}
+export type ReactionStage = 'idle' | 'waiting' | 'active' | 'tooSoon' | 'complete';
 
 export interface ReactionBoardState {
   stage: ReactionStage;
   reactionTimeMs: number | null;
-  swapDetected: boolean;
-  traceCompletion: number;
   message: string;
 }
 
-const computeTraceCompletion = (tracePoints: TracePoint[]): number => {
-  if (tracePoints.length < 8) {
-    return 0;
-  }
-
-  const uniquePoints = new Set(tracePoints.map((point) => `${Math.round(point.x)}:${Math.round(point.y)}`));
-  return Math.min(100, Math.round((uniquePoints.size / 40) * 100));
-};
-
 export function createReactionBoardController(onState: (state: ReactionBoardState) => void) {
-  let stage: ReactionStage = 'tap';
-  let reactionStart: number | null = null;
-  let swapSubscription: Subscription | null = null;
-  let lastAccelerationX = 0;
-  let tracePoints: TracePoint[] = [];
+  let stage: ReactionStage = 'idle';
+  let reactionStartTime: number | null = null;
+  let delayTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   const publish = () => {
+    const message =
+      stage === 'idle'
+        ? 'Tap to Start Challenge'
+        : stage === 'waiting'
+        ? 'Wait for green...'
+        : stage === 'active'
+        ? 'TAP!'
+        : stage === 'tooSoon'
+        ? 'Too Soon!'
+        : 'Challenge Complete!';
+
     onState({
       stage,
-      reactionTimeMs: reactionStart === null ? null : Date.now() - reactionStart,
-      swapDetected: stage !== 'swap',
-      traceCompletion: computeTraceCompletion(tracePoints),
-      message:
-        stage === 'tap'
-          ? 'Tap the hidden button as soon as it appears.'
-          : stage === 'swap'
-          ? 'Swap hand position to complete the challenge.'
-          : stage === 'trace'
-          ? 'Trace the hidden shape with your fingertip as smoothly as possible.'
-          : 'Challenge complete. Great work!',
+      reactionTimeMs: reactionStartTime === null ? null : Date.now() - reactionStartTime,
+      message,
     });
   };
 
-  const startTapStage = () => {
-    stage = 'tap';
-    reactionStart = Date.now();
-    tracePoints = [];
+  const startChallenge = () => {
+    stage = 'idle';
+    reactionStartTime = null;
     publish();
   };
 
-  const submitTap = (): number => {
-    if (reactionStart === null) {
-      throw new Error('Tap stage has not started.');
-    }
-    const reactionTime = Date.now() - reactionStart;
-    stage = 'swap';
-    reactionStart = null;
-    publish();
-    return reactionTime;
-  };
-
-  const startSwapDetection = () => {
-    swapSubscription?.remove();
-    lastAccelerationX = 0;
-    stage = 'swap';
-
-    Accelerometer.setUpdateInterval(80);
-    swapSubscription = Accelerometer.addListener((acceleration) => {
-      if (Math.abs(lastAccelerationX) > 0.9 && Math.sign(lastAccelerationX) !== Math.sign(acceleration.x)) {
-        stage = 'trace';
-        swapSubscription?.remove();
-        swapSubscription = null;
-      }
-      lastAccelerationX = acceleration.x;
+  const handleTap = (): number | null => {
+    if (stage === 'idle') {
+      // User tapped to start
+      stage = 'waiting';
       publish();
-    });
-  };
 
-  const addTracePoint = (point: TracePoint) => {
-    if (stage !== 'trace') {
-      return;
-    }
-    tracePoints = [...tracePoints, point];
-    publish();
-  };
+      // Random delay 1-3 seconds
+      const delay = Math.random() * 2000 + 1000;
+      delayTimeoutId = setTimeout(() => {
+        stage = 'active';
+        reactionStartTime = Date.now();
+        publish();
+      }, delay);
 
-  const finalizeTrace = () => {
-    if (stage !== 'trace') {
-      throw new Error('Trace stage is not active.');
+      return null;
     }
 
-    const completion = computeTraceCompletion(tracePoints);
-    if (completion >= 85) {
+    if (stage === 'waiting') {
+      // User tapped too soon
+      if (delayTimeoutId) clearTimeout(delayTimeoutId);
+      stage = 'tooSoon';
+      publish();
+
+      // Reset after 1 second
+      setTimeout(() => {
+        startChallenge();
+      }, 1000);
+
+      return null;
+    }
+
+    if (stage === 'active') {
+      // Valid tap - record reaction time
+      const reactionTime = Date.now() - (reactionStartTime ?? Date.now());
       stage = 'complete';
+      reactionStartTime = null;
       publish();
-    } else {
-      throw new Error('Shape tracing incomplete. Try to follow the outline more closely.');
+
+      // Reset after 1 second
+      setTimeout(() => {
+        startChallenge();
+      }, 1000);
+
+      return reactionTime;
     }
+
+    return null;
   };
 
   const stop = () => {
-    swapSubscription?.remove();
-    swapSubscription = null;
-    Accelerometer.setUpdateInterval(1000);
+    if (delayTimeoutId) clearTimeout(delayTimeoutId);
+    delayTimeoutId = null;
   };
 
   publish();
 
   return {
-    startTapStage,
-    submitTap,
-    startSwapDetection,
-    addTracePoint,
-    finalizeTrace,
+    startChallenge,
+    handleTap,
     stop,
   };
 }

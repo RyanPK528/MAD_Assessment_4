@@ -1,59 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Alert, PanResponder, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
-import { createReactionBoardController, ReactionBoardState, TracePoint } from '@/services/reactionBoardService';
+import { createReactionBoardController, ReactionBoardState } from '@/services/reactionBoardService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 
 export default function ReactionBoardScreen() {
   const [state, setState] = useState<ReactionBoardState>({
-    stage: 'tap',
+    stage: 'idle',
     reactionTimeMs: null,
-    swapDetected: false,
-    traceCompletion: 0,
-    message: 'Ready to start the reaction board.',
+    message: 'Tap to Start Challenge',
   });
 
   const controller = useMemo(() => createReactionBoardController(setState), []);
 
   useEffect(() => {
-    controller.startTapStage();
+    controller.startChallenge();
     return () => controller.stop();
   }, [controller]);
 
-  const tapHandler = async () => {
-    try {
-      const reactionTime = controller.submitTap();
-      Alert.alert('Reaction recorded', `Reaction time: ${reactionTime} ms`);
-      controller.startSwapDetection();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Unable to submit tap.';
-      Alert.alert('Error', message);
-    }
+  const handleTap = () => {
+    const reactionTime = controller.handleTap();
+    // Reaction time is only non-null when successfully completing a challenge
   };
 
-  const panResponder = PanResponder.create({
-    onStartShouldSetPanResponder: () => state.stage === 'trace',
-    onPanResponderMove: (event, gestureState) => {
-      controller.addTracePoint({
-        x: gestureState.moveX,
-        y: gestureState.moveY,
-        timestamp: Date.now(),
-      });
-    },
-    onPanResponderRelease: () => {
-      if (state.stage === 'trace') {
-        try {
-          controller.finalizeTrace();
-          Alert.alert('Trace complete', 'Great job tracing the shape.');
-        } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : 'Trace did not complete successfully.';
-          Alert.alert('Trace update', message);
-        }
-      }
-    },
-  });
+  // Determine tap area background color based on stage
+  const getTapAreaBackgroundColor = () => {
+    switch (state.stage) {
+      case 'active':
+        return '#22C55E'; // green
+      case 'tooSoon':
+        return '#EF4444'; // red
+      default:
+        return '#374151'; // grey
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -61,23 +43,27 @@ export default function ReactionBoardScreen() {
         Reaction Board Challenge
       </ThemedText>
       <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">Stage</ThemedText>
+        <ThemedText type="subtitle">Current Stage</ThemedText>
         <ThemedText type="body">{state.stage}</ThemedText>
         <ThemedText type="small">{state.message}</ThemedText>
-        <ThemedText type="body">Reaction time: {state.reactionTimeMs ?? '--'} ms</ThemedText>
-        <ThemedText type="body">Trace completion: {state.traceCompletion}%</ThemedText>
-      </ThemedView>
-      <View style={styles.tapArea} {...panResponder.panHandlers}>
-        <ThemedText type="small">{state.stage === 'trace' ? 'Trace here' : 'Tap to complete the active stage'}</ThemedText>
-        {state.stage === 'tap' && (
-          <TextInput
-            onFocus={tapHandler}
-            style={styles.hiddenInput}
-            placeholder="Tap to react"
-            placeholderTextColor="transparent"
-          />
+        {state.reactionTimeMs !== null && state.stage === 'complete' && (
+          <ThemedText type="body" style={{ marginTop: Spacing.two }}>
+            Reaction time: {state.reactionTimeMs} ms
+          </ThemedText>
         )}
-      </View>
+      </ThemedView>
+      <Pressable
+        onPress={handleTap}
+        style={[
+          styles.tapArea,
+          {
+            backgroundColor: getTapAreaBackgroundColor(),
+          },
+        ]}>
+        <ThemedText type="title" style={styles.tapText}>
+          {state.message}
+        </ThemedText>
+      </Pressable>
     </ThemedView>
   );
 }
@@ -102,15 +88,11 @@ const styles = StyleSheet.create({
     flex: 1,
     marginTop: Spacing.four,
     borderRadius: Spacing.three,
-    borderWidth: 1,
-    borderColor: '#34344A',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#11111C',
   },
-  hiddenInput: {
-    width: '100%',
-    height: '100%',
-    opacity: 0,
+  tapText: {
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
 });

@@ -21,10 +21,20 @@ export default function LoginScreen() {
     // eslint-disable-next-line no-console
     console.log('[Login] Calling loginUser...');
     try {
-      await loginUser({ email, password });
+      const profile = await loginUser({ email, password });
       // eslint-disable-next-line no-console
-      console.log('[Login] Authentication successful, navigating to dashboard');
-      router.push('/dashboard');
+      console.log('[Login] Authentication successful, checking group status');
+      
+      // Redirect based on group status
+      if (profile.groupId === null) {
+        // eslint-disable-next-line no-console
+        console.log('[Login] User has no group, redirecting to group management');
+        router.push('/group-management');
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[Login] User has group, navigating to dashboard');
+        router.push('/dashboard');
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed.';
       // eslint-disable-next-line no-console

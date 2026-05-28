@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore';
 import { firebaseAuth, firebaseFirestore } from '../config/firebaseNative';
 
 export interface UserProfile {
@@ -96,7 +96,18 @@ export async function loginUser(credentials: UserCredentials): Promise<UserProfi
     // eslint-disable-next-line no-console
     console.log('[Auth] Fetching user profile from Firestore...');
     const userRef = doc(firebaseFirestore, USERS_COLLECTION, uid);
-    const snapshot = await getDoc(userRef);
+
+    // Prefer a server read for the user profile; fallback to cache if necessary.
+    let snapshot;
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[Auth] Reading user profile from server...');
+      snapshot = await getDocFromServer(userRef);
+    } catch (serverError) {
+      // eslint-disable-next-line no-console
+      console.warn('[Auth] getDocFromServer failed, falling back to local cache:', serverError instanceof Error ? serverError.message : serverError);
+      snapshot = await getDoc(userRef);
+    }
 
     if (!snapshot.exists()) {
       const notFoundError = 'User profile not found after authentication.';

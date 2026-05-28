@@ -1,6 +1,6 @@
 import { Accelerometer, Gyroscope, GyroscopeMeasurement } from 'expo-sensors';
 import * as Haptics from 'expo-haptics';
-import type { Subscription } from 'expo-sensors';
+import { Platform } from 'react-native';
 
 export interface Vector3 {
   x: number;
@@ -27,8 +27,8 @@ const computeDelta = (current: Vector3, previous: Vector3): number => {
 const safeNormalize = (value: number): number => Math.max(0, Math.min(100, 100 - value));
 
 export function createMotionLabController(onUpdate: (state: MotionLabState) => void) {
-  let accelerometerSubscription: Subscription | null = null;
-  let gyroscopeSubscription: Subscription | null = null;
+  let accelerometerSubscription: ReturnType<typeof Accelerometer.addListener> | null = null;
+  let gyroscopeSubscription: ReturnType<typeof Gyroscope.addListener> | null = null;
   let lastAcceleration: Vector3 = { x: 0, y: 0, z: 0 };
   let lastRotation: Vector3 = { x: 0, y: 0, z: 0 };
   let breachCount = 0;
@@ -58,6 +58,13 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
   };
 
   const start = () => {
+    // Sensors are not available on web; skip initialization
+    if (Platform.OS === 'web') {
+      // eslint-disable-next-line no-console
+      console.warn('[MotionLab] Accelerometer and Gyroscope not available on web platform');
+      return;
+    }
+
     Accelerometer.setUpdateInterval(100);
     Gyroscope.setUpdateInterval(100);
 
