@@ -1,80 +1,89 @@
 import { Link } from 'expo-router';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, View, Pressable } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useMemo, useState } from 'react';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useTheme } from '@/hooks/use-theme';
 import { Spacing } from '@/constants/theme';
 
-const categories = {
-  engineering: {
-    title: 'Engineering Challenges',
-    items: [
-      { id: 'parachute-drop', label: 'Parachute Drop Challenge', href: '/activity/parachute-drop' },
-      { id: 'sound-pollution', label: 'Sound Pollution Hunter', href: '/activity/sound-pollution' },
-      { id: 'hand-fan', label: 'Hand Fan Challenge', href: '/activity/hand-fan' },
-      { id: 'earthquake-structure', label: 'Earthquake-Resistant Structure', href: '/activity/earthquake-structure' },
-    ],
-  },
-  health: {
-    title: 'Health and Medical Sciences',
-    items: [
-      { id: 'human-performance', label: 'Human Performance Lab – Stretch Speed & Gracefulness', href: '/activity/human-performance' },
-      { id: 'reaction-board', label: 'Reaction Board Challenge', href: '/activity/reaction-board' },
-      { id: 'breathing-trainer', label: 'Breathing Pace Trainer', href: '/activity/breathing-trainer' },
-    ],
-  },
-};
+const activities = [
+  { id: 'parachute-drop', label: 'Parachute Drop Challenge', href: '/activity/parachute-drop', category: 'Engineering', order: 1 },
+  { id: 'sound-pollution', label: 'Sound Pollution Hunter', href: '/activity/sound-pollution', category: 'Engineering', order: 2 },
+  { id: 'hand-fan', label: 'Hand Fan Challenge', href: '/activity/hand-fan', category: 'Engineering', order: 3 },
+  { id: 'earthquake-structure', label: 'Earthquake-Resistant Structure', href: '/activity/earthquake-structure', category: 'Engineering', order: 4 },
+  { id: 'human-performance', label: 'Human Performance Lab – Stretch Speed & Gracefulness', href: '/activity/human-performance', category: 'Health & Medical', order: 5 },
+  { id: 'reaction-board', label: 'Reaction Board Challenge', href: '/activity/reaction-board', category: 'Health & Medical', order: 6 },
+  { id: 'breathing-trainer', label: 'Breathing Pace Trainer', href: '/activity/breathing-trainer', category: 'Health & Medical', order: 7 },
+] as const;
+
+const categories = ['All', 'Engineering', 'Health & Medical'] as const;
+
+type ActivityCategory = (typeof categories)[number];
+
+const sortedActivities = activities.slice().sort((a, b) => a.order - b.order);
 
 export default function ActivitiesScreen() {
-  const [activeCategory, setActiveCategory] = useState<'engineering' | 'health'>('engineering');
-  const category = categories[activeCategory];
+  const theme = useTheme();
+  const [activeCategory, setActiveCategory] = useState<ActivityCategory>('All');
+
+  const filteredActivities = useMemo(
+    () =>
+      activeCategory === 'All'
+        ? sortedActivities
+        : sortedActivities.filter((item) => item.category === activeCategory),
+    [activeCategory]
+  );
 
   return (
-    <ThemedView style={styles.container}>
-      <View style={styles.headerRow}>
-        <ThemedText type="title">Activities</ThemedText>
-        <ThemedText type="small" style={styles.headerSubtitle}>
-          Filter by the challenge type that fits your team.
-        </ThemedText>
-      </View>
+    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
+      <ThemedText type="title" style={[styles.title, { color: theme.textPrimary }]}>Activities</ThemedText>
 
       <View style={styles.filterRow}>
-        <Pressable
-          onPress={() => setActiveCategory('engineering')}
-          style={({ pressed }) => [
-            styles.filterChip,
-            activeCategory === 'engineering' && styles.filterChipActive,
-            pressed && styles.filterChipPressed,
-          ]}>
-          <ThemedText type="subtitle" style={activeCategory === 'engineering' ? styles.filterTextActive : styles.filterText}>
-            Engineering
-          </ThemedText>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveCategory('health')}
-          style={({ pressed }) => [
-            styles.filterChip,
-            activeCategory === 'health' && styles.filterChipActive,
-            pressed && styles.filterChipPressed,
-          ]}>
-          <ThemedText type="subtitle" style={activeCategory === 'health' ? styles.filterTextActive : styles.filterText}>
-            Health & Medical
-          </ThemedText>
-        </Pressable>
+        {categories.map((category) => {
+          const isSelected = category === activeCategory;
+          return (
+            <Pressable
+              key={category}
+              onPress={() => setActiveCategory(category)}
+              style={[
+                styles.filterButton,
+                {
+                  backgroundColor: isSelected ? theme.accent : theme.backgroundElement,
+                  borderColor: isSelected ? theme.accent : theme.border,
+                },
+              ]}
+            >
+              <ThemedText type="smallBold" style={{ color: isSelected ? theme.backgroundElement : theme.textPrimary }}>
+                {category}
+              </ThemedText>
+            </Pressable>
+          );
+        })}
       </View>
 
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-        <ThemedText type="subtitle" style={styles.categoryHeading}>{category.title}</ThemedText>
-        <View style={styles.cardGrid}>
-          {category.items.map((item) => (
-            <Link key={item.id} href={item.href} style={styles.activityCard}>
-              <ThemedText type="subtitle" style={styles.activityTitle}>{item.label}</ThemedText>
-              <ThemedText type="small">Tap to open this experience.</ThemedText>
-            </Link>
-          ))}
-        </View>
-      </ScrollView>
+      <FlatList
+        data={filteredActivities}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <Link
+            href={item.href}
+            style={[
+              styles.activityCard,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+                shadowColor: theme.shadow,
+              },
+            ]}
+          >
+            <ThemedText type="subtitle" style={{ color: theme.textPrimary }}>{item.label}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{item.category}</ThemedText>
+          </Link>
+        )}
+        ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+        contentContainerStyle={styles.listContent}
+      />
     </ThemedView>
   );
 }
@@ -85,57 +94,33 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     gap: Spacing.three,
   },
-  headerRow: {
-    gap: Spacing.one,
-  },
-  headerSubtitle: {
-    color: '#8E8E99',
+  title: {
+    marginBottom: Spacing.four,
   },
   filterRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.two,
-    marginTop: Spacing.three,
     marginBottom: Spacing.three,
   },
-  filterChip: {
-    flex: 1,
-    paddingVertical: Spacing.three,
+  filterButton: {
+    borderRadius: Spacing.three,
+    paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.four,
-    borderRadius: 999,
-    backgroundColor: '#23232F',
-    alignItems: 'center',
-  },
-  filterChipActive: {
-    backgroundColor: '#3E78FF',
-  },
-  filterChipPressed: {
-    opacity: 0.85,
-  },
-  filterText: {
-    color: '#BBB',
-  },
-  filterTextActive: {
-    color: '#FFF',
+    borderWidth: 1,
   },
   listContent: {
-    gap: Spacing.three,
+    gap: Spacing.two,
     paddingBottom: Spacing.four,
-  },
-  categoryHeading: {
-    marginBottom: Spacing.two,
-  },
-  cardGrid: {
-    gap: Spacing.three,
   },
   activityCard: {
     width: '100%',
     padding: Spacing.four,
     borderRadius: Spacing.three,
-    backgroundColor: '#1F1F2A',
     borderWidth: 1,
-    borderColor: '#2F2F3D',
   },
-  activityTitle: {
-    marginBottom: Spacing.one,
+  divider: {
+    height: 1,
+    marginVertical: Spacing.two,
   },
 });
