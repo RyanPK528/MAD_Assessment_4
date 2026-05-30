@@ -7,26 +7,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Load Firebase config from environment with proper fallbacks
 const getConfigValue = (key: string): string => {
-  // First: check if it's available in process.env (set by build system)
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     const value = process.env[key];
     if (value) return value;
   }
-  
-  // Second: try Constants.expoConfig?.extra (native/Expo Go)
+
   let extra: Record<string, string | undefined> = {};
   try {
     extra = (Constants.expoConfig?.extra ?? Constants.manifest?.extra ?? {}) as Record<string, string | undefined>;
     if (extra[key]) return extra[key];
-  } catch (e) {
-    // Constants might not be available in all contexts
+  } catch {
+    // Constants may not be available in all contexts.
   }
-  
-  // Third: try globalThis (web fallback)
+
   if (typeof globalThis !== 'undefined' && (globalThis as any)[key]) {
     return (globalThis as any)[key];
   }
-  
+
   return '';
 };
 
@@ -57,27 +54,39 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
 
 const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
 
-let firebaseAuth: Auth;
-if (Platform.OS !== 'web') {
-  try {
+const createFirebaseAuth = (): Auth => {
+  if (Platform.OS !== 'web') {
+    try {
+      // eslint-disable-next-line no-console
+      console.log('[Firebase] Attempting native Auth initialization with AsyncStorage persistence...');
+      const auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+      // eslint-disable-next-line no-console
+      console.log('[Firebase] Native Auth initialized successfully');
+      return auth;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // eslint-disable-next-line no-console
+      console.warn('[Firebase] Native auth initialization failed; falling back to getAuth().', message);
+    }
+  } else {
     // eslint-disable-next-line no-console
-    console.log('[Firebase] Initializing Auth on native platform with AsyncStorage persistence...');
-    firebaseAuth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage),
-    });
-    // eslint-disable-next-line no-console
-    console.log('[Firebase] Native Auth initialized');
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    // eslint-disable-next-line no-console
-    console.warn('[Firebase] Native auth initialization failed; falling back to getAuth().', message);
-    firebaseAuth = getAuth(app);
+    console.log('[Firebase] Web platform detected, using getAuth()');
   }
-} else {
-  // eslint-disable-next-line no-console
-  console.log('[Firebase] Web platform detected, using getAuth()');
-  firebaseAuth = getAuth(app);
-}
 
-export { firebaseAuth };
+  try {
+    const auth = getAuth(app);
+    // eslint-disable-next-line no-console
+    console.log('[Firebase] Firebase Auth initialized with fallback getAuth()');
+    return auth;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // eslint-disable-next-line no-console
+    console.error('[Firebase] Fallback Auth initialization failed.', message);
+    throw error;
+  }
+};
+
+export const firebaseAuth = createFirebaseAuth();
 export const firebaseFirestore = getFirestore(app);
