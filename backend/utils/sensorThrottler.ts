@@ -8,12 +8,8 @@ export type SensorWithUpdateInterval =
 
 export function applySensorThrottle(sensor: SensorWithUpdateInterval, active: boolean): void {
   try {
-    if (active) {
-      sensor.setUpdateInterval(100);
-      return;
-    }
-    sensor.setUpdateInterval(1000);
+    sensor.setUpdateInterval(active ? 100 : 1000);
   } catch {
-    // Sensor may not be available on the current device. Preserve app stability.
+    // Sensor may not be available on the current device.
   }
 }
