@@ -8,9 +8,12 @@ export interface GroupDocument {
   id: string;
   name: string;
   gradeLevel: number;
+  grade?: number;
   createdBy: string;
   createdAt: string;
   memberCount: number;
+  completedActivitiesCount?: number;
+  activityResults?: unknown[];
 }
 
 export async function createGroup(groupName: string, gradeLevel: number, userId: string): Promise<GroupDocument> {
@@ -18,13 +21,16 @@ export async function createGroup(groupName: string, gradeLevel: number, userId:
   console.log('[GroupService] Creating new group:', groupName, 'grade:', gradeLevel);
 
   const groupRef = doc(collection(firebaseFirestore, GROUPS_COLLECTION));
-  const groupDocument: GroupDocument = {
+  const groupDocument = {
     id: groupRef.id,
     name: groupName,
     gradeLevel,
+    grade: gradeLevel,
     createdBy: userId,
     createdAt: new Date().toISOString(),
     memberCount: 1,
+    completedActivitiesCount: 0,
+    activityResults: [],
   };
 
   try {
