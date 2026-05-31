@@ -1,6 +1,6 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore';
-import { firebaseAuth, firebaseFirestore } from '../config/firebaseNative';
+import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from '../config/firebaseNative';
 
 export interface UserProfile {
   uid: string;
@@ -25,7 +25,22 @@ export interface UserCredentials {
 
 const USERS_COLLECTION = 'users';
 
+function requireFirebase() {
+  if (!isFirebaseConfigured()) {
+    throw new Error(
+      'Firebase is not configured. Add EXPO_PUBLIC_FIREBASE_* variables to frontend/.env and restart Expo.',
+    );
+  }
+  const auth = getFirebaseAuth();
+  const db = getFirebaseFirestore();
+  if (!auth || !db) {
+    throw new Error('Firebase failed to initialize. Check your .env configuration.');
+  }
+  return { auth, db };
+}
+
 export async function registerUser(payload: UserRegistrationPayload): Promise<UserProfile> {
+  const { auth, db } = requireFirebase();
   const { email, password, firstName, grade } = payload;
   
   // eslint-disable-next-line no-console
@@ -41,7 +56,7 @@ export async function registerUser(payload: UserRegistrationPayload): Promise<Us
   try {
     // eslint-disable-next-line no-console
     console.log('[Auth] Creating Firebase user...');
-    const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+    const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
     const firebaseUser = credential.user;
     // eslint-disable-next-line no-console
     console.log('[Auth] Firebase user created:', firebaseUser.uid);
@@ -57,7 +72,7 @@ export async function registerUser(payload: UserRegistrationPayload): Promise<Us
 
     // eslint-disable-next-line no-console
     console.log('[Auth] Writing user profile to Firestore...');
-    await setDoc(doc(firebaseFirestore, USERS_COLLECTION, firebaseUser.uid), {
+    await setDoc(doc(db, USERS_COLLECTION, firebaseUser.uid), {
       ...profile,
       createdAt: serverTimestamp(),
     });
@@ -73,6 +88,7 @@ export async function registerUser(payload: UserRegistrationPayload): Promise<Us
 }
 
 export async function loginUser(credentials: UserCredentials): Promise<UserProfile> {
+  const { auth, db } = requireFirebase();
   const { email, password } = credentials;
   
   // eslint-disable-next-line no-console
@@ -88,14 +104,14 @@ export async function loginUser(credentials: UserCredentials): Promise<UserProfi
   try {
     // eslint-disable-next-line no-console
     console.log('[Auth] Authenticating with Firebase...');
-    const signInResult = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+    const signInResult = await signInWithEmailAndPassword(auth, email.trim(), password);
     const uid = signInResult.user.uid;
     // eslint-disable-next-line no-console
     console.log('[Auth] User authenticated:', uid);
     
     // eslint-disable-next-line no-console
     console.log('[Auth] Fetching user profile from Firestore...');
-    const userRef = doc(firebaseFirestore, USERS_COLLECTION, uid);
+    const userRef = doc(db, USERS_COLLECTION, uid);
 
     // Prefer a server read for the user profile; fallback to cache if necessary.
     let snapshot;

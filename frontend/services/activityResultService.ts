@@ -1,20 +1,9 @@
-import {
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-} from 'firebase/firestore';
-import { firebaseAuth, firebaseFirestore } from '@/config/firebaseNative';
 import { TOTAL_CHALLENGES } from '@/constants/activities';
+import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from '@/config/firebaseNative';
 import {
   addSyncRecord,
+  ensureSyncQueueInitialized,
   getDueSyncRecords,
-  initializeSyncQueue,
   markRecordFailed,
   markRecordSynced,
 } from '@/services/sqliteService';
@@ -37,15 +26,6 @@ export interface LeaderboardEntry {
   completedActivitiesCount: number;
   completionPercent: number;
   lastProgressUpdatedAt?: string;
-}
-
-let queueInitialized = false;
-
-export async function ensureSyncQueueInitialized(): Promise<void> {
-  if (!queueInitialized) {
-    await initializeSyncQueue();
-    queueInitialized = true;
-  }
 }
 
 export async function saveActivityResult(
@@ -72,7 +52,7 @@ export async function saveActivityResult(
     try {
       await syncPendingResults();
     } catch {
-      // Queued offline; background sync will retry.
+      // Queued offline; background sync will retry when Firebase is available.
     }
   }
 }
@@ -80,12 +60,25 @@ export async function saveActivityResult(
 export async function syncPendingResults(): Promise<number> {
   await ensureSyncQueueInitialized();
 
-  const user = firebaseAuth.currentUser;
-  if (!user) {
+  if (!isFirebaseConfigured()) {
     return 0;
   }
 
-  const userSnap = await getDoc(doc(firebaseFirestore, USERS_COLLECTION, user.uid));
+  const auth = getFirebaseAuth();
+  const db = getFirebaseFirestore();
+  if (!auth?.currentUser || !db) {
+    return 0;
+  }
+
+  const {
+    arrayUnion,
+    doc,
+    getDoc,
+    serverTimestamp,
+    updateDoc,
+  } = await import('firebase/firestore');
+
+  const userSnap = await getDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid));
   if (!userSnap.exists()) {
     return 0;
   }
@@ -101,7 +94,7 @@ export async function syncPendingResults(): Promise<number> {
   for (const record of records) {
     try {
       const payload = JSON.parse(record.payload) as ActivityResultPayload;
-      const groupRef = doc(firebaseFirestore, GROUPS_COLLECTION, groupId);
+      const groupRef = doc(db, GROUPS_COLLECTION, groupId);
 
       const completedIds = await getGroupCompletedActivityIds(groupId);
       const isNewActivity = !completedIds.includes(payload.activityId);
@@ -132,7 +125,13 @@ export async function syncPendingResults(): Promise<number> {
 }
 
 async function getGroupCompletedActivityIds(groupId: string): Promise<string[]> {
-  const groupSnap = await getDoc(doc(firebaseFirestore, GROUPS_COLLECTION, groupId));
+  const db = getFirebaseFirestore();
+  if (!db) {
+    return [];
+  }
+
+  const { doc, getDoc } = await import('firebase/firestore');
+  const groupSnap = await getDoc(doc(db, GROUPS_COLLECTION, groupId));
   if (!groupSnap.exists()) {
     return [];
   }
@@ -148,8 +147,14 @@ async function getGroupCompletedActivityIds(groupId: string): Promise<string[]> 
 }
 
 export async function fetchLeaderboardEntries(): Promise<LeaderboardEntry[]> {
+  const db = getFirebaseFirestore();
+  if (!db) {
+    return [];
+  }
+
+  const { collection, getDocs, orderBy, query } = await import('firebase/firestore');
   const groupQuery = query(
-    collection(firebaseFirestore, GROUPS_COLLECTION),
+    collection(db, GROUPS_COLLECTION),
     orderBy('completedActivitiesCount', 'desc'),
   );
 
@@ -194,12 +199,14 @@ export async function fetchCurrentGroupStats(): Promise<{
   activitiesTotal: number;
   memberCount: number;
 } | null> {
-  const user = firebaseAuth.currentUser;
-  if (!user) {
+  const auth = getFirebaseAuth();
+  const db = getFirebaseFirestore();
+  if (!auth?.currentUser || !db) {
     return null;
   }
 
-  const userSnap = await getDoc(doc(firebaseFirestore, USERS_COLLECTION, user.uid));
+  const { doc, getDoc } = await import('firebase/firestore');
+  const userSnap = await getDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid));
   if (!userSnap.exists()) {
     return null;
   }
@@ -209,7 +216,7 @@ export async function fetchCurrentGroupStats(): Promise<{
     return null;
   }
 
-  const groupSnap = await getDoc(doc(firebaseFirestore, GROUPS_COLLECTION, groupId));
+  const groupSnap = await getDoc(doc(db, GROUPS_COLLECTION, groupId));
   if (!groupSnap.exists()) {
     return null;
   }

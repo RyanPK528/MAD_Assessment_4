@@ -36,6 +36,16 @@ export async function initializeSyncQueue(): Promise<void> {
   `);
 }
 
+let queueInitialized = false;
+
+/** Idempotent wrapper — safe to call from app startup and activity saves. */
+export async function ensureSyncQueueInitialized(): Promise<void> {
+  if (!queueInitialized) {
+    await initializeSyncQueue();
+    queueInitialized = true;
+  }
+}
+
 export async function addSyncRecord(
   payload: object,
   dueTimestamp: number | null = null,
