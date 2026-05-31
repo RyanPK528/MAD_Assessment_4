@@ -1,64 +1,113 @@
-import { FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { onAuthStateChanged } from 'firebase/auth';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { firebaseAuth } from '@/config/firebaseNative';
+import {
+  fetchCurrentGroupStats,
+  fetchLeaderboardEntries,
+  LeaderboardEntry,
+  syncPendingResults,
+} from '@/services/activityResultService';
 import { Spacing } from '@/constants/theme';
-
-const mockLeaderboard = [
-  { rank: 1, name: 'Team Nova', grade: 10, completedActivitiesCount: 6, completionPercent: 85.7 },
-  { rank: 2, name: 'Group Orion', grade: 11, completedActivitiesCount: 5, completionPercent: 71.4 },
-  { rank: 3, name: 'STEM Squad', grade: 10, completedActivitiesCount: 4, completionPercent: 57.1 },
-  { rank: 4, name: 'Lab Beta', grade: 9, completedActivitiesCount: 3, completionPercent: 42.8 },
-  { rank: 5, name: 'Spark Crew', grade: 10, completedActivitiesCount: 2, completionPercent: 28.6 },
-];
 
 export default function LeaderboardScreen() {
   const theme = useTheme();
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    await syncPendingResults();
+    const [board, group] = await Promise.all([fetchLeaderboardEntries(), fetchCurrentGroupStats()]);
+    setEntries(board);
+    setCurrentGroup(group);
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const unsub = onAuthStateChanged(firebaseAuth, () => void load());
+    return unsub;
+  }, [load]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const podium = entries.slice(0, 3);
+  const rest = entries.slice(3);
+  const currentEntry = currentGroup
+    ? entries.find((e) => e.name === currentGroup.name)
+    : null;
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
+    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
       <ThemedText type="title" style={styles.title}>Leaderboard</ThemedText>
-      <View style={styles.podiumRow}>
-        <View style={[styles.podiumCard, styles.second, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <ThemedText type="subtitle">2</ThemedText>
-          <ThemedText type="body">Group Orion</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>71.4%</ThemedText>
+
+      {podium.length >= 3 ? (
+        <View style={styles.podiumRow}>
+          <View style={[styles.podiumCard, styles.second, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <ThemedText type="subtitle">2</ThemedText>
+            <ThemedText type="body">{podium[1]?.name}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{podium[1]?.completionPercent}%</ThemedText>
+          </View>
+          <View style={[styles.podiumCard, styles.first, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <ThemedText type="subtitle">1</ThemedText>
+            <ThemedText type="body">{podium[0]?.name}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{podium[0]?.completionPercent}%</ThemedText>
+          </View>
+          <View style={[styles.podiumCard, styles.third, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <ThemedText type="subtitle">3</ThemedText>
+            <ThemedText type="body">{podium[2]?.name}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{podium[2]?.completionPercent}%</ThemedText>
+          </View>
         </View>
-        <View style={[styles.podiumCard, styles.first, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <ThemedText type="subtitle">1</ThemedText>
-          <ThemedText type="body">Team Nova</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>85.7%</ThemedText>
-        </View>
-        <View style={[styles.podiumCard, styles.third, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <ThemedText type="subtitle">3</ThemedText>
-          <ThemedText type="body">STEM Squad</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>57.1%</ThemedText>
-        </View>
-      </View>
+      ) : (
+        <ThemedText type="body" style={{ color: theme.textSecondary }}>No groups on the leaderboard yet.</ThemedText>
+      )}
 
       <FlatList
-        data={mockLeaderboard.slice(3)}
-        keyExtractor={(item) => String(item.rank)}
+        data={rest}
+        keyExtractor={(item) => item.groupId}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) => (
-          <View style={[styles.rowItem, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
-            <View style={[styles.rankBadge, { backgroundColor: theme.backgroundSelected }]}> 
+          <View style={[styles.rowItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={[styles.rankBadge, { backgroundColor: theme.backgroundSelected }]}>
               <ThemedText type="subtitle">{item.rank}</ThemedText>
             </View>
             <View style={styles.rankText}>
               <ThemedText type="body">{item.name}</ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>Grade {item.grade} • {item.completedActivitiesCount}/7</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                Grade {item.grade} • {item.completedActivitiesCount}/7
+              </ThemedText>
             </View>
             <ThemedText type="small" style={{ color: theme.textSecondary }}>{item.completionPercent}%</ThemedText>
           </View>
         )}
         ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+        ListEmptyComponent={
+          entries.length === 0 ? (
+            <ThemedText type="small" style={{ color: theme.textSecondary, padding: Spacing.four }}>
+              Complete activities with your group to appear here.
+            </ThemedText>
+          ) : null
+        }
       />
 
-      <ThemedView style={[styles.stickyStatus, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-        <ThemedText type="subtitle">Your group</ThemedText>
-        <ThemedText type="body" style={{ color: theme.textSecondary }}>Team Pulse • grade 10 • 4 / 7 complete • 57.1%</ThemedText>
-      </ThemedView>
+      {currentGroup && (
+        <ThemedView style={[styles.stickyStatus, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+          <ThemedText type="subtitle">Your group</ThemedText>
+          <ThemedText type="body" style={{ color: theme.textSecondary }}>
+            {currentGroup.name} • grade {currentGroup.grade} • {currentGroup.activitiesCompleted} / {currentGroup.activitiesTotal} complete
+            {currentEntry ? ` • ${currentEntry.completionPercent}%` : ''}
+          </ThemedText>
+        </ThemedView>
+      )}
     </ThemedView>
   );
 }
@@ -121,6 +170,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
+    marginVertical: Spacing.two,
   },
   stickyStatus: {
     padding: Spacing.four,
