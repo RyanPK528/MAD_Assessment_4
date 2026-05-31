@@ -14,7 +14,7 @@ import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as Location from 'expo-location';
 import { toast } from 'sonner-native';
 
-import { useAppTheme } from '@/hooks/use-app-theme';
+import { useTheme } from '@/hooks/use-theme';
 import { useAppContext } from '@/context/AppContext';
 import StyledButton from '@/components/ui/StyledButton';
 import {
@@ -49,7 +49,7 @@ function DataRow({ label, value, unit, color, theme }: {
 // ── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function ParachuteDrop() {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const router = useRouter();
   const { team } = useAppContext();
 
