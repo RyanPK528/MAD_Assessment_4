@@ -1,0 +1,227 @@
+import {
+  arrayUnion,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+} from 'firebase/firestore';
+import { firebaseAuth, firebaseFirestore } from '@/config/firebaseNative';
+import { TOTAL_CHALLENGES } from '@/constants/activities';
+import {
+  addSyncRecord,
+  getDueSyncRecords,
+  initializeSyncQueue,
+  markRecordFailed,
+  markRecordSynced,
+} from '@/services/sqliteService';
+
+const GROUPS_COLLECTION = 'groups';
+const USERS_COLLECTION = 'users';
+
+export interface ActivityResultPayload {
+  activityId: string;
+  completedAt: string;
+  data: Record<string, unknown>;
+  reflection?: string;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  groupId: string;
+  name: string;
+  grade: number;
+  completedActivitiesCount: number;
+  completionPercent: number;
+  lastProgressUpdatedAt?: string;
+}
+
+let queueInitialized = false;
+
+export async function ensureSyncQueueInitialized(): Promise<void> {
+  if (!queueInitialized) {
+    await initializeSyncQueue();
+    queueInitialized = true;
+  }
+}
+
+export async function saveActivityResult(
+  activityId: string,
+  data: Record<string, unknown>,
+  options?: {
+    reflection?: string;
+    location?: { latitude: number; longitude: number } | null;
+    markComplete?: boolean;
+  },
+): Promise<void> {
+  await ensureSyncQueueInitialized();
+
+  const payload: ActivityResultPayload = {
+    activityId,
+    completedAt: new Date().toISOString(),
+    data,
+    reflection: options?.reflection,
+  };
+
+  await addSyncRecord(payload, null, options?.location ?? null);
+
+  if (options?.markComplete !== false) {
+    try {
+      await syncPendingResults();
+    } catch {
+      // Queued offline; background sync will retry.
+    }
+  }
+}
+
+export async function syncPendingResults(): Promise<number> {
+  await ensureSyncQueueInitialized();
+
+  const user = firebaseAuth.currentUser;
+  if (!user) {
+    return 0;
+  }
+
+  const userSnap = await getDoc(doc(firebaseFirestore, USERS_COLLECTION, user.uid));
+  if (!userSnap.exists()) {
+    return 0;
+  }
+
+  const groupId = userSnap.data().groupId as string | null;
+  if (!groupId) {
+    return 0;
+  }
+
+  const records = await getDueSyncRecords();
+  let synced = 0;
+
+  for (const record of records) {
+    try {
+      const payload = JSON.parse(record.payload) as ActivityResultPayload;
+      const groupRef = doc(firebaseFirestore, GROUPS_COLLECTION, groupId);
+
+      const completedIds = await getGroupCompletedActivityIds(groupId);
+      const isNewActivity = !completedIds.includes(payload.activityId);
+
+      await updateDoc(groupRef, {
+        activityResults: arrayUnion({
+          ...payload,
+          syncedAt: new Date().toISOString(),
+          latitude: record.latitude,
+          longitude: record.longitude,
+        }),
+        ...(isNewActivity
+          ? {
+              completedActivitiesCount: completedIds.length + 1,
+              lastProgressUpdatedAt: serverTimestamp(),
+            }
+          : {}),
+      });
+
+      await markRecordSynced(record.id);
+      synced += 1;
+    } catch {
+      await markRecordFailed(record.id);
+    }
+  }
+
+  return synced;
+}
+
+async function getGroupCompletedActivityIds(groupId: string): Promise<string[]> {
+  const groupSnap = await getDoc(doc(firebaseFirestore, GROUPS_COLLECTION, groupId));
+  if (!groupSnap.exists()) {
+    return [];
+  }
+
+  const results = (groupSnap.data().activityResults ?? []) as ActivityResultPayload[];
+  const ids = new Set<string>();
+  for (const r of results) {
+    if (r.activityId) {
+      ids.add(r.activityId);
+    }
+  }
+  return Array.from(ids);
+}
+
+export async function fetchLeaderboardEntries(): Promise<LeaderboardEntry[]> {
+  const groupQuery = query(
+    collection(firebaseFirestore, GROUPS_COLLECTION),
+    orderBy('completedActivitiesCount', 'desc'),
+  );
+
+  const snapshot = await getDocs(groupQuery);
+
+  const entries: LeaderboardEntry[] = snapshot.docs
+    .map((docSnapshot) => {
+      const data = docSnapshot.data();
+      const completedActivitiesCount = Number(
+        data.completedActivitiesCount ?? data.activitiesCompleted ?? 0,
+      );
+      const completionPercent =
+        Math.round((completedActivitiesCount / TOTAL_CHALLENGES) * 1000) / 10;
+      const grade = Number(data.grade ?? data.gradeLevel ?? 0);
+
+      return {
+        groupId: docSnapshot.id,
+        name: String(data.name ?? 'Unnamed Group'),
+        grade,
+        completedActivitiesCount,
+        completionPercent,
+        lastProgressUpdatedAt: data.lastProgressUpdatedAt?.toDate?.()?.toISOString?.(),
+      };
+    })
+    .sort((a, b) => {
+      if (b.completedActivitiesCount !== a.completedActivitiesCount) {
+        return b.completedActivitiesCount - a.completedActivitiesCount;
+      }
+      const aTime = a.lastProgressUpdatedAt ?? '';
+      const bTime = b.lastProgressUpdatedAt ?? '';
+      return aTime.localeCompare(bTime);
+    })
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+
+  return entries;
+}
+
+export async function fetchCurrentGroupStats(): Promise<{
+  name: string;
+  grade: number;
+  activitiesCompleted: number;
+  activitiesTotal: number;
+  memberCount: number;
+} | null> {
+  const user = firebaseAuth.currentUser;
+  if (!user) {
+    return null;
+  }
+
+  const userSnap = await getDoc(doc(firebaseFirestore, USERS_COLLECTION, user.uid));
+  if (!userSnap.exists()) {
+    return null;
+  }
+
+  const groupId = userSnap.data().groupId as string | null;
+  if (!groupId) {
+    return null;
+  }
+
+  const groupSnap = await getDoc(doc(firebaseFirestore, GROUPS_COLLECTION, groupId));
+  if (!groupSnap.exists()) {
+    return null;
+  }
+
+  const data = groupSnap.data();
+  const completed = Number(data.completedActivitiesCount ?? data.activitiesCompleted ?? 0);
+
+  return {
+    name: String(data.name ?? 'Your Group'),
+    grade: Number(data.grade ?? data.gradeLevel ?? 0),
+    activitiesCompleted: completed,
+    activitiesTotal: TOTAL_CHALLENGES,
+    memberCount: Number(data.memberCount ?? data.memberIds?.length ?? 1),
+  };
+}
