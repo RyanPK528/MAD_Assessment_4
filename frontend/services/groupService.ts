@@ -1,8 +1,19 @@
 import { doc, setDoc, getDoc, query, collection, where, getDocs, getDocFromServer, updateDoc } from 'firebase/firestore';
-import { firebaseFirestore } from '../config/firebaseNative';
+import { getFirebaseFirestore, isFirebaseConfigured } from '../config/firebaseNative';
 
 const GROUPS_COLLECTION = 'groups';
 const USERS_COLLECTION = 'users';
+
+function requireFirestore() {
+  if (!isFirebaseConfigured()) {
+    throw new Error('Firebase is not configured. Add EXPO_PUBLIC_FIREBASE_* to frontend/.env');
+  }
+  const db = getFirebaseFirestore();
+  if (!db) {
+    throw new Error('Firestore failed to initialize.');
+  }
+  return db;
+}
 
 export interface GroupDocument {
   id: string;
@@ -20,7 +31,8 @@ export async function createGroup(groupName: string, gradeLevel: number, userId:
   // eslint-disable-next-line no-console
   console.log('[GroupService] Creating new group:', groupName, 'grade:', gradeLevel);
 
-  const groupRef = doc(collection(firebaseFirestore, GROUPS_COLLECTION));
+  const db = requireFirestore();
+  const groupRef = doc(collection(db, GROUPS_COLLECTION));
   const groupDocument = {
     id: groupRef.id,
     name: groupName,
@@ -37,7 +49,7 @@ export async function createGroup(groupName: string, gradeLevel: number, userId:
     await setDoc(groupRef, groupDocument);
     
     // Update user's groupId
-    const userRef = doc(firebaseFirestore, USERS_COLLECTION, userId);
+    const userRef = doc(db, USERS_COLLECTION, userId);
     await updateDoc(userRef, { groupId: groupRef.id });
     
     // eslint-disable-next-line no-console
@@ -51,11 +63,12 @@ export async function createGroup(groupName: string, gradeLevel: number, userId:
 }
 
 export async function joinGroup(groupId: string, userId: string): Promise<GroupDocument> {
+  const db = requireFirestore();
   // eslint-disable-next-line no-console
   console.log('[GroupService] Joining group:', groupId);
 
   try {
-    const groupRef = doc(firebaseFirestore, GROUPS_COLLECTION, groupId);
+    const groupRef = doc(db, GROUPS_COLLECTION, groupId);
     let groupSnapshot;
 
     try {
@@ -73,7 +86,7 @@ export async function joinGroup(groupId: string, userId: string): Promise<GroupD
     const groupData = groupSnapshot.data() as GroupDocument;
 
     // Update user's groupId
-    const userRef = doc(firebaseFirestore, USERS_COLLECTION, userId);
+    const userRef = doc(db, USERS_COLLECTION, userId);
     await updateDoc(userRef, { groupId: groupId });
 
     // Increment member count
@@ -90,12 +103,13 @@ export async function joinGroup(groupId: string, userId: string): Promise<GroupD
 }
 
 export async function fetchAvailableGroups(gradeLevel: number): Promise<GroupDocument[]> {
+  const db = requireFirestore();
   // eslint-disable-next-line no-console
   console.log('[GroupService] Fetching available groups for grade:', gradeLevel);
 
   try {
     const q = query(
-      collection(firebaseFirestore, GROUPS_COLLECTION),
+      collection(db, GROUPS_COLLECTION),
       where('gradeLevel', '==', gradeLevel),
     );
 
