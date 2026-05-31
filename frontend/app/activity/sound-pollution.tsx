@@ -20,7 +20,7 @@ export default function SoundPollutionScreen() {
   const theme = useTheme();
   const [state, setState] = useState<SoundPollutionState>({
     permissionsGranted: false,
-    isMetering: false,
+    isRecording: false,
     currentDb: 0,
     peakDb: 0,
     actions: [],
@@ -75,7 +75,7 @@ export default function SoundPollutionScreen() {
         <ThemedView style={[styles.meterCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
           <ThemedText type="subtitle">Live sound level</ThemedText>
           <ThemedText type="title" style={{ color: gaugeColor, fontSize: 48 }}>
-            {state.isMetering ? state.currentDb : '—'} dB
+            {state.isRecording ? state.currentDb : '—'} dB
           </ThemedText>
           <ThemedText type="body">Peak: {state.peakDb} dB</ThemedText>
           {state.location && (

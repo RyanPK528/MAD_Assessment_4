@@ -1,7 +1,6 @@
 import { Link } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
 import { SafeAreaView, ScrollView, StyleSheet, View, TouchableOpacity, RefreshControl } from 'react-native';
 import { SymbolView } from 'expo-symbols';
 
@@ -9,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { useThemeContext } from '@/components/ThemeContext';
-import { firebaseAuth, firebaseFirestore } from '@/config/firebaseNative';
+import { getFirebaseAuth, isFirebaseConfigured } from '@/config/firebaseNative';
 import {
   fetchCurrentGroupStats,
   fetchLeaderboardEntries,
@@ -29,11 +28,19 @@ export default function DashboardScreen() {
 
   const load = useCallback(async () => {
     await syncPendingResults();
-    const user = firebaseAuth.currentUser;
-    if (user) {
-      const userSnap = await getDoc(doc(firebaseFirestore, 'users', user.uid));
-      if (userSnap.exists()) {
-        setUserName(String(userSnap.data().firstName ?? 'Student'));
+    const auth = getFirebaseAuth();
+    if (auth && isFirebaseConfigured()) {
+      const user = auth.currentUser;
+      if (user) {
+        const { doc, getDoc } = await import('firebase/firestore');
+        const { getFirebaseFirestore } = await import('@/config/firebaseNative');
+        const db = getFirebaseFirestore();
+        if (db) {
+          const userSnap = await getDoc(doc(db, 'users', user.uid));
+          if (userSnap.exists()) {
+            setUserName(String(userSnap.data().firstName ?? 'Student'));
+          }
+        }
       }
     }
     const [group, board] = await Promise.all([fetchCurrentGroupStats(), fetchLeaderboardEntries()]);
@@ -43,7 +50,11 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     void load();
-    const unsub = onAuthStateChanged(firebaseAuth, () => void load());
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      return;
+    }
+    const unsub = onAuthStateChanged(auth, () => void load());
     return unsub;
   }, [load]);
 

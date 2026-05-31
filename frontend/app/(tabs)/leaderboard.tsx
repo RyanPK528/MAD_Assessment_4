@@ -5,7 +5,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
-import { firebaseAuth } from '@/config/firebaseNative';
+import { getFirebaseAuth } from '@/config/firebaseNative';
 import {
   fetchCurrentGroupStats,
   fetchLeaderboardEntries,
@@ -29,7 +29,11 @@ export default function LeaderboardScreen() {
 
   useEffect(() => {
     void load();
-    const unsub = onAuthStateChanged(firebaseAuth, () => void load());
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      return;
+    }
+    const unsub = onAuthStateChanged(auth, () => void load());
     return unsub;
   }, [load]);
 
