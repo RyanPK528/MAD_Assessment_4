@@ -1,270 +1,160 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, StyleSheet, View } from 'react-native';
+import { Button, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import {
-  createSoundPollutionController,
-  SoundPollutionState,
-  SoundLevel,
-} from '@/services/soundPollutionService';
+import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useTheme } from '@/hooks/use-theme';
+import {
+  createSoundPollutionController,
+  getRiskLabel,
+  SoundPollutionState,
+  SoundPrediction,
+} from '@/services/soundPollutionService';
+import { saveActivityResult } from '@/services/activityResultService';
 import { Spacing } from '@/constants/theme';
 
-const INITIAL_STATE: SoundPollutionState = {
-  isRecording: false,
-  hasPermission: false,
-  currentDb: 0,
-  averageDb: 0,
-  peakDb: 0,
-  level: 'quiet',
-  loudEventCount: 0,
-  secondsElapsed: 0,
-  samples: [],
-  message: 'Press Start to begin measuring noise levels.',
-};
-
-const LEVEL_COLORS: Record<SoundLevel, string> = {
-  quiet: '#22C55E',
-  moderate: '#F59E0B',
-  loud: '#F97316',
-  very_loud: '#EF4444',
-};
-
-const LEVEL_LABELS: Record<SoundLevel, string> = {
-  quiet: 'Quiet',
-  moderate: 'Moderate',
-  loud: 'Loud',
-  very_loud: 'Very Loud',
-};
-
-/** Renders a simple horizontal bar visualising dB as a filled proportion */
-function DbMeter({ db, maxDb = 120, color }: { db: number; maxDb?: number; color: string }) {
-  const fill = Math.min(1, db / maxDb);
-  return (
-    <View style={meterStyles.track}>
-      <View style={[meterStyles.fill, { width: `${fill * 100}%` as any, backgroundColor: color }]} />
-    </View>
-  );
-}
-
-const meterStyles = StyleSheet.create({
-  track: {
-    height: 14,
-    width: '100%',
-    backgroundColor: '#1F2937',
-    borderRadius: 7,
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    borderRadius: 7,
-  },
-});
-
-/** Mini waveform chart from the last N samples */
-function MiniBarChart({ samples }: { samples: SoundPollutionState['samples'] }) {
-  if (samples.length === 0) return null;
-  const maxDb = 120;
-  return (
-    <View style={chartStyles.container}>
-      {samples.slice(-20).map((s, i) => (
-        <View
-          key={i}
-          style={[
-            chartStyles.bar,
-            {
-              height: `${Math.max(4, (s.decibelDb / maxDb) * 100)}%` as any,
-              backgroundColor: LEVEL_COLORS[s.level],
-            },
-          ]}
-        />
-      ))}
-    </View>
-  );
-}
-
-const chartStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 60,
-    gap: 2,
-    paddingTop: Spacing.one,
-  },
-  bar: {
-    flex: 1,
-    borderRadius: 2,
-    minHeight: 4,
-  },
-});
+const DEFAULT_ACTIONS = ['Drop book on table', 'Talk loudly', 'Stamp feet'];
 
 export default function SoundPollutionScreen() {
-  const [soundState, setSoundState] = useState<SoundPollutionState>(INITIAL_STATE);
+  const theme = useTheme();
+  const [state, setState] = useState<SoundPollutionState>({
+    permissionsGranted: false,
+    isMetering: false,
+    currentDb: 0,
+    peakDb: 0,
+    actions: [],
+    location: null,
+    message: 'Grant microphone and location permissions to begin.',
+  });
+  const [actionLabel, setActionLabel] = useState(DEFAULT_ACTIONS[0]);
+  const [prediction, setPrediction] = useState<SoundPrediction>('louder');
+  const [submitting, setSubmitting] = useState(false);
 
-  const controller = useMemo(
-    () => createSoundPollutionController(setSoundState),
-    [],
-  );
+  const controller = useMemo(() => createSoundPollutionController(setState), []);
 
   useEffect(() => {
+    void controller.requestPermissions();
     return () => {
       void controller.stop();
     };
   }, [controller]);
 
-  const levelColor = LEVEL_COLORS[soundState.level];
+  const riskLevel = state.currentDb > 0 ? (state.peakDb >= state.currentDb ? state.peakDb : state.currentDb) : 0;
+  const gaugeColor =
+    riskLevel >= 100 ? theme.danger : riskLevel >= 85 ? '#F59E0B' : riskLevel >= 60 ? theme.accent : theme.success;
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      await saveActivityResult(
+        'sound-pollution',
+        { actions: state.actions, zones: state.actions.map((a) => ({ label: a.label, lat: a.latitude, lng: a.longitude, db: a.measuredDb })) },
+        { location: state.location, reflection: undefined },
+      );
+      setState((s) => ({ ...s, message: 'Results saved with GPS tags.' }));
+    } catch {
+      setState((s) => ({ ...s, message: 'Saved offline.' }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        Sound Pollution Hunter
-      </ThemedText>
-
-      {/* Big dB readout */}
-      <View style={[styles.bigReadout, { borderColor: levelColor }]}>
-        <ThemedText
-          type="title"
-          style={[styles.bigDb, { color: levelColor }]}
-        >
-          {soundState.currentDb}
+    <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
+      <ThemedView style={styles.container}>
+        <ThemedText type="title">Sound Pollution Hunter</ThemedText>
+        <ThemedText type="body" style={{ color: theme.textSecondary }}>
+          Measure noise from classroom actions and map loud vs quiet zones with GPS.
         </ThemedText>
-        <ThemedText type="small" style={styles.dbUnit}>dB</ThemedText>
-        <View style={[styles.levelBadge, { backgroundColor: levelColor }]}>
-          <ThemedText type="smallBold" style={styles.levelText}>
-            {LEVEL_LABELS[soundState.level]}
+
+        {!state.permissionsGranted && (
+          <Button title="Grant permissions" onPress={() => controller.requestPermissions()} />
+        )}
+
+        <ThemedView style={[styles.meterCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <ThemedText type="subtitle">Live sound level</ThemedText>
+          <ThemedText type="title" style={{ color: gaugeColor, fontSize: 48 }}>
+            {state.isMetering ? state.currentDb : '—'} dB
           </ThemedText>
-        </View>
-      </View>
-
-      {/* dB meter bar */}
-      <ThemedView style={styles.card}>
-        <ThemedText type="subtitle">Live Level</ThemedText>
-        <DbMeter db={soundState.currentDb} color={levelColor} />
-
-        <View style={styles.metricRow}>
-          <ThemedText type="small" style={styles.metricKey}>Average (5s)</ThemedText>
-          <ThemedText type="small">{soundState.averageDb} dB</ThemedText>
-        </View>
-        <View style={styles.metricRow}>
-          <ThemedText type="small" style={styles.metricKey}>Peak</ThemedText>
-          <ThemedText type="small" style={{ color: '#EF4444' }}>{soundState.peakDb} dB</ThemedText>
-        </View>
-        <View style={styles.metricRow}>
-          <ThemedText type="small" style={styles.metricKey}>Loud Events (&gt;70 dB)</ThemedText>
-          <ThemedText type="small">{soundState.loudEventCount}</ThemedText>
-        </View>
-        <View style={styles.metricRow}>
-          <ThemedText type="small" style={styles.metricKey}>Duration</ThemedText>
-          <ThemedText type="small">{soundState.secondsElapsed}s</ThemedText>
-        </View>
-      </ThemedView>
-
-      {/* Waveform history */}
-      {soundState.samples.length > 0 && (
-        <ThemedView style={styles.card}>
-          <ThemedText type="subtitle">dB History (last 20s)</ThemedText>
-          <MiniBarChart samples={soundState.samples} />
+          <ThemedText type="body">Peak: {state.peakDb} dB</ThemedText>
+          {state.location && (
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>
+              GPS: {state.location.latitude.toFixed(4)}, {state.location.longitude.toFixed(4)}
+            </ThemedText>
+          )}
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
+          <View style={styles.buttonRow}>
+            {!state.isMetering ? (
+              <Button title="Start metering" onPress={() => controller.startMetering()} disabled={!state.permissionsGranted} />
+            ) : (
+              <Button title="Stop metering" onPress={() => controller.stopMetering()} />
+            )}
+          </View>
         </ThemedView>
-      )}
 
-      {/* Status */}
-      <ThemedView style={styles.messageCard}>
-        <ThemedText type="small">{soundState.message}</ThemedText>
+        <ThemedText type="subtitle">Log action</ThemedText>
+        <View style={styles.chipRow}>
+          {DEFAULT_ACTIONS.map((a) => (
+            <Pressable key={a} onPress={() => setActionLabel(a)} style={[styles.chip, { borderColor: theme.border, backgroundColor: actionLabel === a ? theme.accent : theme.backgroundElement }]}>
+              <ThemedText type="small" style={{ color: actionLabel === a ? '#fff' : theme.textPrimary }}>{a}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          value={actionLabel}
+          onChangeText={setActionLabel}
+          placeholder="Action label"
+          placeholderTextColor={theme.textSecondary}
+          style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
+        />
+        <ThemedText type="small">Prediction vs previous</ThemedText>
+        <View style={styles.segmentRow}>
+          {(['louder', 'softer', 'same'] as SoundPrediction[]).map((p) => (
+            <Pressable key={p} onPress={() => setPrediction(p)} style={[styles.segment, { backgroundColor: prediction === p ? theme.accent : theme.backgroundElement, borderColor: theme.border }]}>
+              <ThemedText type="small" style={{ color: prediction === p ? '#fff' : theme.textPrimary }}>{p}</ThemedText>
+            </Pressable>
+          ))}
+        </View>
+        <Button
+          title="Log this action"
+          onPress={() => controller.logAction(actionLabel, prediction)}
+          disabled={state.actions.length >= 10}
+        />
+
+        {state.actions.length > 0 && (
+          <>
+            <TrialResultsTable
+              predictionHeader="Predicted"
+              outcomeHeader="Measured (dB)"
+              rows={state.actions.map((a) => ({
+                label: a.label,
+                prediction: a.prediction,
+                outcome: `${a.measuredDb} dB — ${getRiskLabel(a.riskLevel)}`,
+              }))}
+            />
+            <ThemedText type="subtitle">Zone map</ThemedText>
+            {state.actions.map((a, i) => (
+              <ThemedText key={i} type="small" style={{ color: theme.textSecondary }}>
+                {a.label}: {a.measuredDb} dB @ {a.latitude?.toFixed(3) ?? '?'}, {a.longitude?.toFixed(3) ?? '?'}
+              </ThemedText>
+            ))}
+          </>
+        )}
+
+        <Button title={submitting ? 'Saving…' : 'Submit results'} onPress={handleSubmit} disabled={submitting || state.actions.length === 0} />
       </ThemedView>
-
-      {/* Controls */}
-      <View style={styles.buttonRow}>
-        <View style={styles.buttonWrapper}>
-          <Button
-            title={soundState.isRecording ? 'Stop' : 'Start'}
-            onPress={() => {
-              if (soundState.isRecording) {
-                void controller.stop();
-              } else {
-                void controller.start();
-              }
-            }}
-            color={soundState.isRecording ? '#EF4444' : '#22C55E'}
-          />
-        </View>
-        <View style={styles.buttonWrapper}>
-          <Button
-            title="Reset"
-            onPress={() => void controller.reset()}
-            color="#6B7280"
-          />
-        </View>
-      </View>
-    </ThemedView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: Spacing.four,
-    gap: Spacing.three,
-  },
-  title: {
-    marginBottom: Spacing.two,
-  },
-  bigReadout: {
-    alignSelf: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderRadius: 80,
-    width: 160,
-    height: 160,
-    justifyContent: 'center',
-    gap: 2,
-    padding: Spacing.three,
-  },
-  bigDb: {
-    fontSize: 56,
-    fontWeight: '800',
-    lineHeight: 60,
-  },
-  dbUnit: {
-    color: '#9CA3AF',
-    fontSize: 16,
-  },
-  levelBadge: {
-    marginTop: Spacing.one,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: 2,
-    borderRadius: Spacing.two,
-  },
-  levelText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  card: {
-    width: '100%',
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    backgroundColor: '#20202E',
-    gap: Spacing.two,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  metricKey: {
-    color: '#9CA3AF',
-  },
-  messageCard: {
-    padding: Spacing.three,
-    borderRadius: Spacing.two,
-    backgroundColor: '#111827',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-    marginTop: Spacing.two,
-  },
-  buttonWrapper: {
-    flex: 1,
-  },
+  container: { padding: Spacing.four, gap: Spacing.three, paddingBottom: Spacing.six },
+  meterCard: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two, alignItems: 'center' },
+  buttonRow: { marginTop: Spacing.two },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
+  chip: { padding: Spacing.two, borderRadius: Spacing.two, borderWidth: 1 },
+  input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
+  segmentRow: { flexDirection: 'row', gap: Spacing.two },
+  segment: { padding: Spacing.two, borderRadius: Spacing.two, borderWidth: 1, flex: 1, alignItems: 'center' },
 });
