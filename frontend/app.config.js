@@ -42,6 +42,7 @@ module.exports = {
           cameraPermission: 'Allow STEMM Lab to record parachute drop videos.',
           microphonePermission: 'Allow STEMM Lab to record audio with videos.',
           recordAudioAndroid: true,
+          recordAudioIOS: true,
         },
       ],
       [

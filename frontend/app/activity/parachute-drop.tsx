@@ -1,4 +1,4 @@
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions,useMicrophonePermissions } from 'expo-camera';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
@@ -39,6 +39,8 @@ export default function ParachuteDropScreen() {
   const [showCamera, setShowCamera] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const [isRecording, setIsRecording] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
   const controller = useMemo(() => {
@@ -51,25 +53,58 @@ export default function ParachuteDropScreen() {
   const activeTrial = state.trials[state.activeTrialIndex];
 
   const handleRecordVideo = async () => {
-    if (!permission?.granted) {
-      await requestPermission();
-      return;
+    // 2. Use the variables returned by the hooks inside your function
+    
+    // Check and request camera permission
+    let camStatus = permission;
+    if (!camStatus?.granted) {
+      camStatus = await requestPermission();
     }
-    setShowCamera(true);
+    
+    // Check and request microphone permission
+    let micStatus = micPermission;
+    if (!micStatus?.granted) {
+      micStatus = await requestMicPermission();
+    }
+
+    // Only show camera if BOTH are granted
+    if (camStatus?.granted && micStatus?.granted) {
+      setShowCamera(true);
+    }
+  };
+  const handleStartRecording = async () => {
+    // Prevent starting if already recording or camera isn't ready
+    if (!cameraRef.current || isRecording) return;
+    
+    try {
+      setIsRecording(true); 
+      console.log("Attempting to start recording...");
+      
+      const video = await cameraRef.current.recordAsync({ maxDuration: 30 });
+      
+      console.log("Recording finished successfully:", video?.uri);
+      if (video?.uri) {
+        controller.setVideoUri(video.uri);
+      }
+    } catch (error) {
+      console.error("ACTUAL NATIVE ERROR:", error); 
+    } finally {
+      setIsRecording(false); 
+      // 🚨 Safely close the camera ONLY after the video is fully saved or cancelled
+      setShowCamera(false); 
+    }
   };
 
-  const handleStopVideo = async () => {
-    if (cameraRef.current) {
-      try {
-        const video = await cameraRef.current.recordAsync({ maxDuration: 30 });
-        if (video?.uri) {
-          controller.setVideoUri(video.uri);
-        }
-      } catch {
-        // recording may not have started
-      }
+  const handleStopVideo = () => {
+    if (cameraRef.current && isRecording) {
+      console.log("Stopping recording...");
+      // Tell the camera to stop. DO NOT close the camera here. 
+      // The handleStartRecording function above will close it when the file is ready.
+      cameraRef.current.stopRecording();
+    } else {
+      // If they haven't started recording yet, it's safe to just close the camera
+      setShowCamera(false);
     }
-    setShowCamera(false);
   };
 
   const handleSubmit = async () => {
@@ -89,15 +124,24 @@ export default function ParachuteDropScreen() {
     }
   };
 
-  if (showCamera && permission?.granted) {
+ if (showCamera && permission?.granted) {
     return (
       <View style={styles.cameraContainer}>
-        <CameraView ref={cameraRef} style={styles.camera} mode="video" facing="back">
-          <View style={styles.cameraControls}>
-            <Button title="Start recording" onPress={() => cameraRef.current?.recordAsync()} />
-            <Button title="Stop & close" onPress={handleStopVideo} />
-          </View>
-        </CameraView>
+        <CameraView ref={cameraRef} style={styles.camera} mode="video" facing="back" />
+        
+        <View style={styles.cameraControls}>
+          {/* This makes the button react to the state we created */}
+          <Button 
+            title={isRecording ? "Recording..." : "Start recording"} 
+            onPress={handleStartRecording} 
+            disabled={isRecording} 
+          />
+          
+          <Button 
+            title={isRecording ? "Stop & Save" : "Cancel & Close"} 
+            onPress={handleStopVideo} 
+          />
+        </View>
       </View>
     );
   }
