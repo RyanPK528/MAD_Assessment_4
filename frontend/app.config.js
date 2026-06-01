@@ -21,6 +21,7 @@ module.exports = {
         NSCameraUsageDescription: 'STEMM Lab uses the camera to record parachute drop videos for slow-motion analysis.',
         NSMicrophoneUsageDescription: 'STEMM Lab uses the microphone to measure classroom sound levels.',
         NSLocationWhenInUseUsageDescription: 'STEMM Lab tags activity results with your location for sound zone mapping.',
+        bundleIdentifier: 'com.anonymous.frontend',
       },
     },
     android: {
@@ -32,6 +33,8 @@ module.exports = {
         'ACCESS_FINE_LOCATION',
         'ACCESS_COARSE_LOCATION',
       ],
+
+      package: 'com.anonymous.frontend',
     },
     plugins: [
       ...appJson.expo.plugins,
@@ -54,5 +57,4 @@ module.exports = {
     ],
   },
 };
-
 
