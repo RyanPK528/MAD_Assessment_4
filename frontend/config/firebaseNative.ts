@@ -1,7 +1,8 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { getApps, initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence, type Auth } from 'firebase/auth';
+import { getApp, getApps, initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, initializeAuth, Auth, Firestore, getReactNativePersistence } from 'firebase/auth';
+// @ts-ignore: getReactNativePersistence is available in the native SDK but not always in the web types used by TS
 import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -37,56 +38,52 @@ const firebaseConfig = {
 };
 
 // eslint-disable-next-line no-console
-console.log('[Firebase] Configuration loaded:');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   projectId:', firebaseConfig.projectId ? '✓' : '✗ MISSING');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   apiKey:', firebaseConfig.apiKey ? '✓' : '✗ MISSING');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   authDomain:', firebaseConfig.authDomain ? '✓' : '✗ MISSING');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   Platform:', Platform.OS);
-
-if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
+if (__DEV__) {
   // eslint-disable-next-line no-console
-  console.error('[Firebase] Missing critical configuration. Check .env file and app.config.js');
+  console.log(`[Firebase] Initializing for ${Platform.OS} (Project: ${firebaseConfig.projectId || 'Unknown'})`);
 }
 
-const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
+  const errorMsg = '[Firebase] Missing critical configuration. Ensure EXPO_PUBLIC_FIREBASE_* variables are set.';
+  // eslint-disable-next-line no-console
+  console.error(errorMsg);
+}
 
-const createFirebaseAuth = (): Auth => {
-  if (Platform.OS !== 'web') {
-    try {
-      // eslint-disable-next-line no-console
-      console.log('[Firebase] Attempting native Auth initialization with AsyncStorage persistence...');
-      const auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage),
-      });
-      // eslint-disable-next-line no-console
-      console.log('[Firebase] Native Auth initialized successfully');
-      return auth;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // eslint-disable-next-line no-console
-      console.warn('[Firebase] Native auth initialization failed; falling back to getAuth().', message);
-    }
-  } else {
-    // eslint-disable-next-line no-console
-    console.log('[Firebase] Web platform detected, using getAuth()');
-  }
+// Internal singletons
+let firebaseApp: FirebaseApp | undefined;
+let firebaseAuth: Auth | undefined;
+let firebaseFirestore: Firestore | undefined;
 
-  try {
-    const auth = getAuth(app);
-    // eslint-disable-next-line no-console
-    console.log('[Firebase] Firebase Auth initialized with fallback getAuth()');
-    return auth;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // eslint-disable-next-line no-console
-    console.error('[Firebase] Fallback Auth initialization failed.', message);
-    throw error;
+export const getFirebaseApp = (): FirebaseApp => {
+  if (!firebaseApp) {
+    firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   }
+  return firebaseApp;
 };
 
-export const firebaseAuth = createFirebaseAuth();
-export const firebaseFirestore = getFirestore(app);
+export const getFirebaseAuth = (): Auth => {
+  if (firebaseAuth) return firebaseAuth;
+
+  const app = getFirebaseApp();
+  if (Platform.OS === 'web') {
+    firebaseAuth = getAuth(app);
+  } else {
+    try {
+      // Attempt to get existing instance to prevent "already registered" errors during Fast Refresh
+      firebaseAuth = getAuth(app);
+    } catch (e) {
+      // Initialize with Persistence if not already registered
+      firebaseAuth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+    }
+  }
+  return firebaseAuth;
+};
+
+export const getFirebaseFirestore = (): Firestore => {
+  if (!firebaseFirestore) {
+    firebaseFirestore = getFirestore(getFirebaseApp());
+  }
+  return firebaseFirestore;
+};

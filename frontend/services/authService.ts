@@ -1,6 +1,6 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, getDocFromServer, serverTimestamp, setDoc } from 'firebase/firestore';
-import { firebaseAuth, firebaseFirestore } from '../config/firebaseNative';
+import { getFirebaseAuth, getFirebaseFirestore } from '../config/firebaseNative';
 
 export interface UserProfile {
   uid: string;
@@ -41,7 +41,7 @@ export async function registerUser(payload: UserRegistrationPayload): Promise<Us
   try {
     // eslint-disable-next-line no-console
     console.log('[Auth] Creating Firebase user...');
-    const credential = await createUserWithEmailAndPassword(firebaseAuth, email.trim(), password);
+    const credential = await createUserWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
     const firebaseUser = credential.user;
     // eslint-disable-next-line no-console
     console.log('[Auth] Firebase user created:', firebaseUser.uid);
@@ -57,7 +57,7 @@ export async function registerUser(payload: UserRegistrationPayload): Promise<Us
 
     // eslint-disable-next-line no-console
     console.log('[Auth] Writing user profile to Firestore...');
-    await setDoc(doc(firebaseFirestore, USERS_COLLECTION, firebaseUser.uid), {
+    await setDoc(doc(getFirebaseFirestore(), USERS_COLLECTION, firebaseUser.uid), {
       ...profile,
       createdAt: serverTimestamp(),
     });
@@ -88,14 +88,14 @@ export async function loginUser(credentials: UserCredentials): Promise<UserProfi
   try {
     // eslint-disable-next-line no-console
     console.log('[Auth] Authenticating with Firebase...');
-    const signInResult = await signInWithEmailAndPassword(firebaseAuth, email.trim(), password);
+    const signInResult = await signInWithEmailAndPassword(getFirebaseAuth(), email.trim(), password);
     const uid = signInResult.user.uid;
     // eslint-disable-next-line no-console
     console.log('[Auth] User authenticated:', uid);
     
     // eslint-disable-next-line no-console
     console.log('[Auth] Fetching user profile from Firestore...');
-    const userRef = doc(firebaseFirestore, USERS_COLLECTION, uid);
+    const userRef = doc(getFirebaseFirestore(), USERS_COLLECTION, uid);
 
     // Prefer a server read for the user profile; fallback to cache if necessary.
     let snapshot;
@@ -133,5 +133,36 @@ export async function loginUser(credentials: UserCredentials): Promise<UserProfi
     // eslint-disable-next-line no-console
     console.error('[Auth] Login error:', error instanceof Error ? error.message : error);
     throw error;
+  }
+}
+
+export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+  if (!uid) return null;
+
+  try {
+    const userRef = doc(getFirebaseFirestore(), USERS_COLLECTION, uid);
+    
+    let snapshot;
+    try {
+      snapshot = await getDocFromServer(userRef);
+    } catch {
+      snapshot = await getDoc(userRef);
+    }
+
+    if (!snapshot.exists()) return null;
+
+    const data = snapshot.data();
+    return {
+      uid,
+      email: String(data.email ?? ''),
+      firstName: String(data.firstName ?? ''),
+      grade: Number(data.grade ?? 0),
+      groupId: data.groupId === null ? null : String(data.groupId),
+      createdAt: String(data.createdAt?.toDate?.()?.toISOString?.() ?? data.createdAt ?? new Date().toISOString()),
+    };
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.error('[Auth] Get profile error:', error);
+    throw new Error('Failed to retrieve user profile.');
   }
 }
