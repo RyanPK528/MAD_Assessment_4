@@ -153,7 +153,7 @@ export default function ParachuteDropScreen() {
       </View>
     );
   }
-
+  
   const overviewContent = (
     <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
       <ThemedText type="subtitle">Description</ThemedText>
