@@ -85,7 +85,7 @@ export default function HumanPerformanceScreen() {
       <ThemedText type="body">1. Hold the phone firmly in one hand. Activate the App vibration sensor.</ThemedText>
       <ThemedText type="body">2. Perform guided movement slowly as shown below. Record the vibration.</ThemedText>
       <Image
-        source={require('@/assets/images/activity5.png')} // Placeholder image
+        source={require('../../assets/instructions/activity5.png')}
         style={styles.instructionImage}
         resizeMode="contain"
       />
