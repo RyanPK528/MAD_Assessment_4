@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, StyleSheet, TextInput, View } from 'react-native';
+import { Button, Image, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivityLayout } from '@/components/activity/ActivityLayout';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
@@ -75,7 +75,11 @@ export default function EarthquakeStructureScreen() {
       <ThemedText type="body">2. Place phone at structure center and run vibration test.</ThemedText>
       <ThemedText type="body">3. Save results for up to three designs and submit.</ThemedText>
       <ThemedText type="subtitle">Diagram</ThemedText>
-      <ThemedText type="small">Phone accelerometer/gyroscope tracks displacement and rotation during shake test.</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity4.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
   );
 
@@ -189,6 +193,12 @@ export default function EarthquakeStructureScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: Spacing.three, paddingBottom: Spacing.six },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
+  },
   card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },
   row: { flexDirection: 'row', gap: Spacing.two },
   halfField: { flex: 1, gap: Spacing.one },

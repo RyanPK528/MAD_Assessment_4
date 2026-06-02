@@ -1,6 +1,6 @@
 import { CameraView, useCameraPermissions,useMicrophonePermissions } from 'expo-camera';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, StyleSheet, TextInput, View } from 'react-native';
+import { Button, Image, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivityLayout } from '@/components/activity/ActivityLayout';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
@@ -165,7 +165,11 @@ export default function ParachuteDropScreen() {
       <ThemedText type="body">2. Run up to three design trials.</ThemedText>
       <ThemedText type="body">3. Record fall and contact times, then submit results.</ThemedText>
       <ThemedText type="subtitle">Diagram</ThemedText>
-      <ThemedText type="small">Fixed drop point → parachute deploy → ground contact timing window.</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity1.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
   );
 
@@ -337,6 +341,12 @@ export default function ParachuteDropScreen() {
 const styles = StyleSheet.create({
   container: { padding: Spacing.four, gap: Spacing.three, paddingBottom: Spacing.six },
   card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
+  },
   input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
   buttonRow: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center', flexWrap: 'wrap' },
   trialTabs: { flexDirection: 'row', gap: Spacing.two },

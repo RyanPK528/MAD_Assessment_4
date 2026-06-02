@@ -87,14 +87,15 @@ export default function HumanPerformanceScreen() {
       <ThemedText type="subtitle" style={styles.sectionTitle}>Step-by-Step Instructions</ThemedText>
       <ThemedText type="body">1. Hold the phone firmly in one hand. Activate the App vibration sensor.</ThemedText>
       <ThemedText type="body">2. Perform guided movement slowly as shown below. Record the vibration.</ThemedText>
+      <ThemedText type="body">3. Repeat the activity with vibration feedback enabled.</ThemedText>
+      <ThemedText type="body">4. Review speed, smoothness, and range-of-motion data.</ThemedText>
+      <ThemedText type="body">5. Upload results and reflect as a group.</ThemedText>
+      <ThemedText type="subtitle">Diagram</ThemedText>
       <Image
         source={require('../../assets/instructions/activity5.png')}
         style={styles.instructionImage}
         resizeMode="contain"
       />
-      <ThemedText type="body">3. Repeat the activity with vibration feedback enabled.</ThemedText>
-      <ThemedText type="body">4. Review speed, smoothness, and range-of-motion data.</ThemedText>
-      <ThemedText type="body">5. Upload results and reflect as a group.</ThemedText>
     </ThemedView>
   );
 

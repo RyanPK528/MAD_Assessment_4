@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, StyleSheet, View, TextInput } from 'react-native';
+import { Button, Image, StyleSheet, View, TextInput } from 'react-native';
 
 import { createBreathingTrainerController, BreathingTrainerState } from '@/services/breathingTrainerService';
 import { ThemedText } from '@/components/themed-text';
@@ -47,7 +47,11 @@ export default function BreathingTrainerScreen() {
       <ThemedText type="body">2. Follow inhale/exhale cues.</ThemedText>
       <ThemedText type="body">3. Stop and submit attempt.</ThemedText>
       <ThemedText type="subtitle">Diagram</ThemedText>
-      <ThemedText type="small">Cycle: inhale → hold → exhale → rest.</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity7.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
   );
 
@@ -88,6 +92,12 @@ export default function BreathingTrainerScreen() {
 const styles = StyleSheet.create({
   container: {
     gap: Spacing.three,
+  },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
   },
   buttonRow: {
     width: '100%',

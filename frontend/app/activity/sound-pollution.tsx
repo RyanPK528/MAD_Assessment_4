@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Button, Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivityLayout } from '@/components/activity/ActivityLayout';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
@@ -78,7 +78,11 @@ export default function SoundPollutionScreen() {
       <ThemedText type="body">2. Start metering and log classroom actions.</ThemedText>
       <ThemedText type="body">3. Submit mapped sound readings.</ThemedText>
       <ThemedText type="subtitle">Diagram</ThemedText>
-      <ThemedText type="small">Sound meter reads dB while GPS tags each measurement location.</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity2.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
   );
 
@@ -193,6 +197,12 @@ export default function SoundPollutionScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: Spacing.three, paddingBottom: Spacing.six },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
+  },
   meterCard: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two, alignItems: 'center' },
   buttonRow: { marginTop: Spacing.two },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },

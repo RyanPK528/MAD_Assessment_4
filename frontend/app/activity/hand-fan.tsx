@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Button, Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivityLayout } from '@/components/activity/ActivityLayout';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
@@ -74,7 +74,11 @@ export default function HandFanScreen() {
       <ThemedText type="body">2. Start fanning and record intensity.</ThemedText>
       <ThemedText type="body">3. Save up to three designs and submit.</ThemedText>
       <ThemedText type="subtitle">Diagram</ThemedText>
-      <ThemedText type="small">Fan airflow bends upright sheet; greater distance reduces force on structure.</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity3.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
   );
 
@@ -190,6 +194,12 @@ export default function HandFanScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: Spacing.three, paddingBottom: Spacing.six },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
+  },
   segmentRow: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
   segment: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Spacing.two, borderWidth: 1 },
   card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },

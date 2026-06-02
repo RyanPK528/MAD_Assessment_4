@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, TextInput } from 'react-native';
+import { Image, Pressable, StyleSheet, TextInput } from 'react-native';
 
 import { ActivityLayout } from '@/components/activity/ActivityLayout';
 import { createReactionBoardController, ReactionBoardState } from '@/services/reactionBoardService';
@@ -57,7 +57,11 @@ export default function ReactionBoardScreen() {
       <ThemedText type="body">2. Wait for active state.</ThemedText>
       <ThemedText type="body">3. Tap immediately and repeat attempts.</ThemedText>
       <ThemedText type="subtitle">Diagram</ThemedText>
-      <ThemedText type="small">Tap area changes from gray to green; green is the valid reaction window.</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity6.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
   );
 
@@ -113,6 +117,12 @@ export default function ReactionBoardScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: Spacing.three },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
+  },
   tapArea: {
     minHeight: 200,
     marginTop: Spacing.four,
