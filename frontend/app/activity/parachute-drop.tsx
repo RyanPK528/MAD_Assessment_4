@@ -1,7 +1,8 @@
 import { CameraView, useCameraPermissions,useMicrophonePermissions } from 'expo-camera';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Button, StyleSheet, TextInput, View } from 'react-native';
 
+import { ActivityLayout } from '@/components/activity/ActivityLayout';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
 import { PhysicsResultPanel } from '@/components/activity/PhysicsResultPanel';
 import { SessionTimer } from '@/components/activity/SessionTimer';
@@ -41,6 +42,9 @@ export default function ParachuteDropScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const [isRecording, setIsRecording] = useState(false);
+  const [selfRating, setSelfRating] = useState('3');
+  const [comments, setComments] = useState('');
+  const [submittedAttempts, setSubmittedAttempts] = useState<{ trialsCompleted: number; sessionTimerSec: number }[]>([]);
   const cameraRef = useRef<CameraView>(null);
 
   const controller = useMemo(() => {
@@ -115,7 +119,11 @@ export default function ParachuteDropScreen() {
         toyMassKg: state.toyMassKg,
         trials: state.trials,
         sessionTimerSec: state.sessionTimerSec,
-      }, { reflection: state.reflection });
+      }, { reflection: `${state.reflection} | Self-rating: ${selfRating}/5 | ${comments}` });
+      setSubmittedAttempts((current) => [
+        { trialsCompleted: state.trials.filter((t) => t.fallTimeSec !== null).length, sessionTimerSec: state.sessionTimerSec },
+        ...current,
+      ].slice(0, 5));
       setState((s) => ({ ...s, message: 'Results saved.' }));
     } catch {
       setState((s) => ({ ...s, message: 'Saved offline.' }));
@@ -146,14 +154,23 @@ export default function ParachuteDropScreen() {
     );
   }
 
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
-      <ThemedView style={styles.container}>
-        <ThemedText type="title">Parachute Drop Challenge</ThemedText>
-        <ThemedText type="body" style={{ color: theme.textSecondary }}>
-          Drop your toy from a fixed height, record fall time and slow-motion contact time, then compare up to 3 parachute designs.
-        </ThemedText>
+  const overviewContent = (
+    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <ThemedText type="subtitle">Description</ThemedText>
+      <ThemedText type="body">Drop a toy from a fixed height, measure fall time and contact time, and compare up to three parachute designs.</ThemedText>
+      <ThemedText type="subtitle">Materials / Equipment</ThemedText>
+      <ThemedText type="body">Toy, parachute prototypes, measuring tape, phone with camera.</ThemedText>
+      <ThemedText type="subtitle">Instructions</ThemedText>
+      <ThemedText type="body">1. Set drop height and toy mass.</ThemedText>
+      <ThemedText type="body">2. Run up to three design trials.</ThemedText>
+      <ThemedText type="body">3. Record fall and contact times, then submit results.</ThemedText>
+      <ThemedText type="subtitle">Diagram</ThemedText>
+      <ThemedText type="small">Fixed drop point → parachute deploy → ground contact timing window.</ThemedText>
+    </ThemedView>
+  );
 
+  const activityContent = (
+      <ThemedView style={styles.container}>
         <SessionTimer
           elapsedSec={state.sessionTimerSec}
           maxSec={SESSION_MAX_SEC}
@@ -268,15 +285,6 @@ export default function ParachuteDropScreen() {
           />
         )}
 
-        <ThemedText type="small">Team reflection</ThemedText>
-        <TextInput
-          value={state.reflection}
-          onChangeText={(v) => controller.setReflection(v)}
-          multiline
-          placeholder="Which parachute design was best? Were your timing predictions correct?"
-          placeholderTextColor={theme.textSecondary}
-          style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]}
-        />
         <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
         <Button
           title={submitting ? 'Saving…' : 'Submit results'}
@@ -284,7 +292,45 @@ export default function ParachuteDropScreen() {
           disabled={submitting || !state.trials.some((t) => t.fallTimeSec !== null)}
         />
       </ThemedView>
-    </ScrollView>
+  );
+
+  const submissionContent = (
+    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <ThemedText type="subtitle">Submitted attempts</ThemedText>
+      {submittedAttempts.length === 0 ? (
+        <ThemedText type="small">No submissions yet.</ThemedText>
+      ) : (
+        submittedAttempts.map((attempt, idx) => (
+          <ThemedText key={idx} type="small">
+            Attempt {idx + 1}: {attempt.trialsCompleted} trials, session {attempt.sessionTimerSec}s
+          </ThemedText>
+        ))
+      )}
+      <ThemedText type="subtitle">Theory behind activity</ThemedText>
+      <ThemedText type="body">Parachutes increase air resistance, reducing terminal velocity and impact force through drag.</ThemedText>
+      <ThemedText type="subtitle">Team reflection</ThemedText>
+      <TextInput
+        value={state.reflection}
+        onChangeText={(v) => controller.setReflection(v)}
+        multiline
+        placeholder="Which parachute design was best?"
+        placeholderTextColor={theme.textSecondary}
+        style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]}
+      />
+      <ThemedText type="subtitle">Self-rating (1-5)</ThemedText>
+      <TextInput value={selfRating} onChangeText={setSelfRating} keyboardType="number-pad" style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]} />
+      <ThemedText type="subtitle">Comments</ThemedText>
+      <TextInput value={comments} onChangeText={setComments} multiline style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]} />
+    </ThemedView>
+  );
+
+  return (
+    <ActivityLayout
+      activityName="Parachute Drop Challenge"
+      overviewContent={overviewContent}
+      activityContent={activityContent}
+      submissionContent={submissionContent}
+    />
   );
 }
 

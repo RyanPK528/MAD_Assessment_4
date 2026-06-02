@@ -1,112 +1,260 @@
-# 🔬 STEMM Lab - Mobile Application
+# STEMM Lab
 
 Transform real-world physical activities into engaging, game-based Science, Technology, Engineering, Mathematics, and Medicine (STEMM) learning experiences for upper Primary and lower High School students.
 
-![Expo](https://img.shields.io/badge/Expo-Managed_Workflow-black?style=flat-square&logo=expo)
-![React Native](https://img.shields.io/badge/React%20Native-Cross_Platform-blue?style=flat-square&logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-Strict-blue?style=flat-square&logo=typescript)
-![Firebase](https://img.shields.io/badge/Firebase-Firestore_%26_Auth-orange?style=flat-square&logo=firebase)
+![Expo](https://img.shields.io/badge/Expo-56-black?style=flat-square&logo=expo)
+![React Native](https://img.shields.io/badge/React%20Native-0.85-blue?style=flat-square&logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue?style=flat-square&logo=typescript)
+![Firebase](https://img.shields.io/badge/Firebase-Auth_%26_Firestore-orange?style=flat-square&logo=firebase)
 
 ---
 
-## 📱 Features & Core Flows
+## Project Overview
 
-### 🔐 Individual Authentication & Profile Guarding
-- **Individual Identity Registration:** Students sign up uniquely using their Email, Password, First Name, and Academic Grade/Year Level.
-- **Grade Isolation Boundary:** Users can only browse, create, or join teams sharing their exact individual academic grade bracket.
+STEMM Lab is a cross-platform mobile application built with Expo and React Native. Teams of students register a single shared account, complete seven sensor-driven STEMM challenges, and compete on a grade-aware leaderboard.
 
-### 👥 Group Setup Engine
-- **Post-Auth State Routing:** Users with an unassigned group are locked to a Group Setup Junction Screen, utilizing clean mobile user interface abstractions to intuitively guide them through team creation or joining.
-- **Group Creation & Joining:** Programmatically instantiates groups with a unique 6-character alphanumeric discriminator. Strict backend transactions ensure users can only join teams matching their grade level.
+Each team account stores:
 
-### 🏆 Global Group Progression Leaderboard
-- **Completion Percentage Tracking:** Teams are ranked based on their total completion percentile across the 7 core challenges.
-- **Time-Based Tie-Breaker Logic:** If two or more groups have identical activity progression, a strict First-Come, First-Served constraint awards the higher rank to the team that hit the progress milestone first.
-- **Visual Display Layout:** Features dynamic filter configurations, a customized 3-column top podium UI, and a scrollable standings list pinning a sticky layout element for the user's current group status.
+- Team name and member first names
+- Grade level (Year 5–10)
+- A unique 6-character alphanumeric **Team ID** (discriminator)
+- Activity completion progress synced to Firebase Firestore
 
----
+The app supports offline activity capture through a local SQLite queue and syncs results to the cloud when connectivity is restored. Activities use device sensors, camera, microphone, and location where appropriate.
 
-## ⚙️ Technical Blueprint & Backend Services
+**Primary user flow**
 
-### 💾 Local Relational Storage & Cloud Sync
-- **Local SQLite Engine:** Utilizes `expo-sqlite` to cleanly cache telemetry configurations and student entries offline.
-- **Hybrid Cloud Sync:** Pushes batched transactions upwards to remote Firebase Firestore instantly when connectivity toggles.
-
-### 🔋 Context-Aware Hardware Integration & Battery Optimization
-- Harnesses robust context-aware computing by hooking into `expo-sensors` to throttle hardware sampling frequencies based on user state. Sensors aggressively down-regulate or shut down the microsecond an activity screen unmounts, conserving power.
-- **Background Tasks:** Utilizes `expo-background-fetch` and `expo-location` to securely process background sync loops and transparently tag physics data with exact geographic coordinates without dropping main UI frames.
+1. Sign up or log in as a team account
+2. Browse and complete activities from the Activities tab
+3. Track team progress on the Dashboard
+4. Compare standings on the Leaderboard
+5. Manage team profile, theme, and preferences in Settings
 
 ---
 
-## 🎓 Available Activities
+## Technology Stack
 
-1. **Parachute Drop** - Engineering 
-2. **Sound Pollution Hunter** - Physics 
-3. **Hand Fan Challenge** - Engineering 
-4. **Earthquake Structure** - Engineering 
-5. **Stretch Lab** - Health 
-6. **Reaction Board** - Health 
-7. **Breathing Trainer** - Health 
+| Layer | Technology |
+|-------|------------|
+| Framework | Expo ~56 (managed workflow), React Native 0.85, React 19 |
+| Language | TypeScript ~6.0 |
+| Navigation | Expo Router ~56 (file-based routing) |
+| Authentication & Database | Firebase JS SDK 12 (Auth, Firestore) |
+| Offline storage | `expo-sqlite` (sync queue for activity results) |
+| Sensors & hardware | `expo-sensors`, `expo-camera`, `expo-av`, `expo-location` |
+| Background tasks | `expo-background-fetch`, `expo-task-manager` |
+| UI & animation | React Context (theme), Reanimated 4, Safe Area Context |
+| Icons | `expo-symbols` via cross-platform `AppIcon` wrapper |
+| Testing | Jest 29, `jest-expo` |
+| Linting | ESLint 9, `eslint-config-expo` |
+| Build | EAS Build (`eas.json`) |
+| Dev tooling | Firebase Admin SDK (standalone Firestore seed script) |
+
+The `/backend` folder contains shared service logic, models, and controllers used as a reference layer; the runnable Expo app lives in `/frontend`.
 
 ---
 
-## 🚀 Quick Start
+## Project Structure
+
+```
+StemmLab/
+├── frontend/                    # Expo React Native application
+│   ├── app/                     # Expo Router screens
+│   │   ├── (auth)/              # Login & signup
+│   │   ├── (tabs)/              # Main tab navigation
+│   │   │   ├── dashboard.tsx
+│   │   │   ├── activities.tsx
+│   │   │   ├── leaderboard.tsx
+│   │   │   └── settings.tsx     # Team profile + theme
+│   │   └── activity/            # Individual challenge screens
+│   ├── components/              # Reusable UI (ActivityLayout, themed components)
+│   ├── config/                  # Firebase native initialization
+│   ├── constants/               # Theme tokens, activity IDs
+│   ├── hooks/                   # Theme, focus-load, activity styles
+│   ├── services/                # Auth, groups, SQLite sync, activity logic
+│   ├── utils/                   # Group discriminator generation
+│   ├── scripts/                 # Standalone dev scripts (seed-database.mjs)
+│   ├── __tests__/               # Jest unit tests
+│   ├── app.config.js            # Expo config + env injection
+│   ├── eas.json                 # EAS build profiles
+│   └── package.json
+├── backend/                     # Shared backend services & models
+│   ├── config/
+│   ├── controllers/
+│   ├── models/
+│   ├── services/
+│   └── tasks/
+├── firestore.rules              # Firestore security rules
+└── README.md
+```
+
+---
+
+## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+ and npm
-- Expo CLI: `npm install -g expo-cli`
-- Expo Go Application
+- [Expo Go](https://expo.dev/go) on a physical device, or Android/iOS emulator
+- A Firebase project with **Authentication (Email/Password)** and **Cloud Firestore** enabled
 
-### Installation
-1. Clone the project repository.
-2. Initialize dependencies:
-   ```bash
-   npm install
-
-### Running the App
+### 1. Clone and install
 
 ```bash
-# Start Expo development server
-npm start
-
-# Open on iOS Simulator (macOS)
-i
-
-# Open on Android Emulator
-a
-
-# Open on Web
-w
-
-# Or scan QR code with Expo Go app on your phone
+git clone <repository-url>
+cd StemmLab/frontend
+npm install
 ```
 
-## 🏗️ Architecture
+### 2. Configure Firebase environment variables
 
-- **Framework**: Expo Managed Workflow (React Native) with strict TypeScript.
-- **Project Structure**: Decoupled architecture separating logic (`/backend` containing controllers, services, models, and configs) from UI (`/frontend` utilizing standard Expo native setups).
-- **Navigation**: Expo Router (file-based routing).
-- **State Management**: React Context API paired with custom backend service hooks.
-- **Cloud Infrastructure**: Firebase (Authentication & Firestore) for profile guarding, real-time syncing, and leaderboards.
-- **Offline Storage**: Local relational databases using `expo-sqlite` for buffering activity data during offline states.
-- **Device Capabilities**: Deep native integration for hardware telemetry, background tasks, and location tracking via standard Expo SDKs.
+Create `frontend/.env` (this file is gitignored):
 
-### Tech Stack
+```env
+EXPO_PUBLIC_FIREBASE_API_KEY=your-api-key
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+EXPO_PUBLIC_FIREBASE_APP_ID=your-app-id
+```
 
-- React Native 0.81.5
-- Expo 54.0
-- Expo Router 6.0
-- TypeScript 5.9
-- Firebase JS SDK (Authentication, Firestore)
-- Core Expo Libraries (`expo-sqlite`, `expo-sensors`, `expo-task-manager`, `expo-background-fetch`, `expo-location`)
-- Media Libraries (`expo-camera`, `expo-av`)
-- React Reanimated 4
+Values are available in the Firebase Console under **Project settings → General → Your apps**.
 
-## 📚 Learn More
+### 3. Deploy Firestore security rules
+
+From the repository root:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+### 4. Run the development server
+
+```bash
+cd frontend
+npm start
+```
+
+Then press `a` for Android, `i` for iOS (macOS), `w` for web, or scan the QR code with Expo Go.
+
+
+---
+
+## Testing
+
+Unit tests live in `frontend/__tests__/` and target services and shared logic.
+
+```bash
+cd frontend
+npm test
+```
+
+Run a single test file:
+
+```bash
+npm test -- authService.grade.test.ts
+```
+
+Jest is configured in `frontend/jest.config.js` with the `jest-expo` preset. Coverage is collected from `services/` and `components/`.
+
+A Firebase Test Lab scaffold is included at `frontend/firebase-test-lab.yml` for future CI integration.
+
+---
+
+## Linting
+
+```bash
+cd frontend
+npm run lint
+```
+
+ESLint uses the Expo flat config (`frontend/eslint.config.js`) with `eslint-config-expo`. Run lint before committing changes to catch unused variables, hook violations, and TypeScript-aware React Native issues.
+
+---
+
+## Key Features
+
+### Team account authentication
+
+- One Firebase Auth account per team (not per individual student)
+- Registration captures team name, member first names, and grade level (Year 5–10)
+- Creates linked `users/{uid}` and `groups/{groupId}` documents in a Firestore transaction
+
+### Unique Team ID
+
+- Each group receives a random 6-character alphanumeric discriminator (e.g. `ST3M9X`)
+- Generated with Firestore collision checking at registration
+- Displayed on the Settings screen for reference
+
+### Seven STEMM activities
+
+Each activity uses a three-tab layout (Overview, Activity, Submission):
+
+| Activity | Category |
+|----------|----------|
+| Parachute Drop Challenge | Engineering |
+| Sound Pollution Hunter | Engineering |
+| Hand Fan Challenge | Engineering |
+| Earthquake-Resistant Structure | Engineering |
+| Human Performance Lab | Health & Medical |
+| Reaction Board Challenge | Health & Medical |
+| Breathing Pace Trainer | Health & Medical |
+
+### Leaderboard
+
+- Teams ranked by completion percentage across all 7 challenges
+- Tie-breaker: earlier `lastProgressUpdatedAt` wins
+- Top-3 podium view plus scrollable standings
+- Sticky bottom banner showing the current team's rank, name, and progress bar
+
+### Offline sync
+
+- Activity results queued locally in SQLite when offline
+- `syncPendingResults()` pushes pending records to Firestore when the app regains connectivity
+
+### Theme support
+
+- Light and dark mode toggle in Settings
+- Theme tokens centralized in `constants/theme.ts` via `ThemeContext`
+
+### Navigation
+
+Main tabs: **Dashboard**, **Activities**, **Leaderboard**, **Settings**
+
+Activity screens navigate back explicitly to the Activities list (not the Dashboard).
+
+---
+
+## Security
+
+### Firestore rules (`firestore.rules`)
+
+| Collection | Policy |
+|------------|--------|
+| `users/{userId}` | Users can read/write only their own profile; creation validates team name, members, and grade |
+| `groups/{groupId}` | Authenticated read (leaderboard); create requires creator as first member or `isSeedData` flag; update restricted to group members |
+| All other paths | Denied by default |
+
+### Client-side practices
+
+- Firebase config loaded from environment variables (`EXPO_PUBLIC_*`), not hardcoded secrets
+- Service account keys used only by the dev seed script and must never be committed (`.env` and key files are gitignored)
+- Auth persistence uses AsyncStorage via `initializeAuth` on native platforms
+- Grade-level validation enforced when joining groups
+
+### Permissions
+
+The app requests camera, microphone, and location permissions only for activities that need them. Usage descriptions are defined in `app.config.js`.
+
+---
+
+## Learn More
 
 - [Expo Documentation](https://docs.expo.dev/)
-- [React Native Docs](https://reactnative.dev/)
-- [Expo Router Guide](https://docs.expo.dev/router/introduction/)
+- [Expo Router](https://docs.expo.dev/router/introduction/)
+- [React Native](https://reactnative.dev/)
+- [Firebase for Web/React Native](https://firebase.google.com/docs/web/setup)
+- [Firestore Security Rules](https://firebase.google.com/docs/firestore/security/get-started)
+- [EAS Build](https://docs.expo.dev/build/introduction/)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-

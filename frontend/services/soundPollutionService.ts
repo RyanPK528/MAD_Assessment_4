@@ -1,4 +1,3 @@
-import { Audio } from 'expo-av';
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 
@@ -24,6 +23,41 @@ export interface SoundPollutionState {
   message: string;
 }
 
+type AvRecording = {
+  getStatusAsync: () => Promise<{ isRecording?: boolean; metering?: number }>;
+  stopAndUnloadAsync: () => Promise<void>;
+};
+
+type AvAudio = {
+  requestPermissionsAsync: () => Promise<{ status: string }>;
+  setAudioModeAsync: (mode: object) => Promise<void>;
+  Recording: {
+    createAsync: (
+      options: object,
+      onRecordingStatusUpdate?: unknown,
+      progressUpdateIntervalMillis?: number,
+    ) => Promise<{ recording: AvRecording }>;
+    OptionsPresets: { HIGH_QUALITY: object };
+  };
+};
+
+let cachedAudio: AvAudio | null | undefined;
+
+async function loadAudioModule(): Promise<AvAudio | null> {
+  if (cachedAudio !== undefined) {
+    return cachedAudio;
+  }
+  try {
+    const mod = await import('expo-av');
+    cachedAudio = mod.Audio as AvAudio;
+    return cachedAudio;
+  } catch (error) {
+    cachedAudio = null;
+    console.warn('[SoundPollution] expo-av unavailable. Run: npx expo install expo-av', error);
+    return null;
+  }
+}
+
 export function classifyRisk(db: number): SoundRiskLevel {
   if (db < 60) return 'safe';
   if (db < 85) return 'fatigue';
@@ -44,7 +78,6 @@ export function getRiskLabel(level: SoundRiskLevel): string {
 }
 
 export function normalizeMeteringToDb(metering: number): number {
-  // expo-av metering is typically -160 to 0 dBFS
   const clamped = Math.max(-60, Math.min(0, metering));
   return Math.round(30 + (clamped + 60) * (90 / 60));
 }
@@ -60,7 +93,7 @@ export function createSoundPollutionController(onUpdate: (state: SoundPollutionS
     message: 'Grant microphone and location permissions to begin.',
   };
 
-  let recording: Audio.Recording | null = null;
+  let recording: AvRecording | null = null;
   let meterInterval: ReturnType<typeof setInterval> | null = null;
 
   const publish = () => onUpdate({ ...state });
@@ -68,6 +101,16 @@ export function createSoundPollutionController(onUpdate: (state: SoundPollutionS
   const requestPermissions = async (): Promise<boolean> => {
     if (Platform.OS === 'web') {
       state = { ...state, message: 'Microphone metering requires a physical device.' };
+      publish();
+      return false;
+    }
+
+    const Audio = await loadAudioModule();
+    if (!Audio) {
+      state = {
+        ...state,
+        message: 'Audio module unavailable. Rebuild the app after running: npx expo install expo-av',
+      };
       publish();
       return false;
     }
@@ -105,6 +148,13 @@ export function createSoundPollutionController(onUpdate: (state: SoundPollutionS
       if (!ok) return;
     }
 
+    const Audio = await loadAudioModule();
+    if (!Audio) {
+      state = { ...state, message: 'Audio module unavailable. Rebuild after installing expo-av.' };
+      publish();
+      return;
+    }
+
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
@@ -112,7 +162,7 @@ export function createSoundPollutionController(onUpdate: (state: SoundPollutionS
 
     const { recording: rec } = await Audio.Recording.createAsync(
       {
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+        ...Audio.Recording.OptionsPresets.HIGH_QUALITY,
         isMeteringEnabled: true,
       },
       undefined,

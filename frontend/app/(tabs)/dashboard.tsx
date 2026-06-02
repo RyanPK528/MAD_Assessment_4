@@ -1,13 +1,12 @@
 import { Link } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { SafeAreaView, ScrollView, StyleSheet, View, TouchableOpacity, RefreshControl } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { ScrollView, StyleSheet, View, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
-import { useThemeContext } from '@/components/ThemeContext';
 import { getFirebaseAuth, isFirebaseConfigured } from '@/config/firebaseNative';
 import {
   fetchCurrentGroupStats,
@@ -15,13 +14,13 @@ import {
   syncPendingResults,
 } from '@/services/activityResultService';
 import { Spacing } from '@/constants/theme';
+import { getUserProfile } from '@/services/authService';
 
 export default function DashboardScreen() {
   const theme = useTheme();
-  const { mode, toggleMode } = useThemeContext();
-  const isDark = mode === 'dark';
 
-  const [userName, setUserName] = useState('Student');
+  const [teamName, setTeamName] = useState('Team');
+  const [memberPreview, setMemberPreview] = useState('');
   const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
   const [leaderboardPreview, setLeaderboardPreview] = useState<{ rank: number; name: string; score: number }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,14 +31,10 @@ export default function DashboardScreen() {
     if (auth && isFirebaseConfigured()) {
       const user = auth.currentUser;
       if (user) {
-        const { doc, getDoc } = await import('firebase/firestore');
-        const { getFirebaseFirestore } = await import('@/config/firebaseNative');
-        const db = getFirebaseFirestore();
-        if (db) {
-          const userSnap = await getDoc(doc(db, 'users', user.uid));
-          if (userSnap.exists()) {
-            setUserName(String(userSnap.data().firstName ?? 'Student'));
-          }
+        const profile = await getUserProfile(user.uid);
+        if (profile) {
+          setTeamName(profile.teamName);
+          setMemberPreview(profile.memberFirstNames.slice(0, 3).join(', '));
         }
       }
     }
@@ -49,12 +44,13 @@ export default function DashboardScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
     const auth = getFirebaseAuth();
     if (!auth) {
       return;
     }
-    const unsub = onAuthStateChanged(auth, () => void load());
+    const unsub = onAuthStateChanged(auth, () => {
+      void load();
+    });
     return unsub;
   }, [load]);
 
@@ -79,19 +75,17 @@ export default function DashboardScreen() {
           <View style={styles.header}>
             <View>
               <ThemedText type="small" style={[styles.greeting, { color: theme.textSecondary }]}>
-                Good afternoon, {userName}
+                Team account
               </ThemedText>
               <ThemedText type="subtitle" style={[styles.teamName, { color: theme.textPrimary }]}>
-                {currentGroup?.name ?? 'No group yet'}
+                {currentGroup?.name ?? teamName}
               </ThemedText>
+              {memberPreview ? (
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  Members: {memberPreview}
+                </ThemedText>
+              ) : null}
             </View>
-            <TouchableOpacity style={[styles.themeToggle, { backgroundColor: theme.backgroundSelected }]} onPress={toggleMode}>
-              <SymbolView
-                name={isDark ? 'sun.max.fill' : 'moon.fill'}
-                size={20}
-                tintColor={isDark ? '#FFD54F' : theme.textSecondary}
-              />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.statsContainer}>
@@ -164,20 +158,10 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: Spacing.four,
   },
   greeting: { fontSize: 14, marginBottom: Spacing.one },
   teamName: { fontSize: 28, lineHeight: 34 },
-  themeToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -1,5 +1,6 @@
 import { Link } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo, useState } from 'react';
 
 import { ThemedText } from '@/components/themed-text';
@@ -36,7 +37,8 @@ export default function ActivitiesScreen() {
   );
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
+    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ThemedText type="title" style={[styles.title, { color: theme.textPrimary }]}>Activities</ThemedText>
 
       <View style={styles.filterRow}>
@@ -84,12 +86,16 @@ export default function ActivitiesScreen() {
         ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.border }]} />}
         contentContainerStyle={styles.listContent}
       />
+      </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  safeArea: {
     flex: 1,
     padding: Spacing.four,
     gap: Spacing.three,

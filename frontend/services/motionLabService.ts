@@ -76,7 +76,7 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
   const start = () => {
     // Sensors are not available on web; skip initialization
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line no-console
+       
       console.warn('[MotionLab] Accelerometer and Gyroscope not available on web platform');
       return;
     }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -14,8 +15,11 @@ import {
 } from '@/services/activityResultService';
 import { Spacing } from '@/constants/theme';
 
+const STICKY_BANNER_HEIGHT = 120;
+
 export default function LeaderboardScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -28,12 +32,13 @@ export default function LeaderboardScreen() {
   }, []);
 
   useEffect(() => {
-    void load();
     const auth = getFirebaseAuth();
     if (!auth) {
       return;
     }
-    const unsub = onAuthStateChanged(auth, () => void load());
+    const unsub = onAuthStateChanged(auth, () => {
+      void load();
+    });
     return unsub;
   }, [load]);
 
@@ -46,8 +51,10 @@ export default function LeaderboardScreen() {
   const podium = entries.slice(0, 3);
   const rest = entries.slice(3);
   const currentEntry = currentGroup
-    ? entries.find((e) => e.name === currentGroup.name)
+    ? entries.find((entry) => entry.groupId === currentGroup.groupId)
     : null;
+  const currentRank = currentEntry?.rank ?? null;
+  const currentCompletion = currentEntry?.completionPercent ?? currentGroup?.completionPercent ?? 0;
 
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
@@ -78,6 +85,10 @@ export default function LeaderboardScreen() {
       <FlatList
         data={rest}
         keyExtractor={(item) => item.groupId}
+        style={styles.list}
+        contentContainerStyle={{
+          paddingBottom: currentGroup ? STICKY_BANNER_HEIGHT + insets.bottom + Spacing.four : Spacing.four,
+        }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) => (
           <View style={[styles.rowItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
@@ -103,15 +114,52 @@ export default function LeaderboardScreen() {
         }
       />
 
-      {currentGroup && (
-        <ThemedView style={[styles.stickyStatus, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
-          <ThemedText type="subtitle">Your group</ThemedText>
-          <ThemedText type="body" style={{ color: theme.textSecondary }}>
-            {currentGroup.name} • grade {currentGroup.grade} • {currentGroup.activitiesCompleted} / {currentGroup.activitiesTotal} complete
-            {currentEntry ? ` • ${currentEntry.completionPercent}%` : ''}
+      {currentGroup ? (
+        <ThemedView
+          style={[
+            styles.rankBanner,
+            {
+              backgroundColor: theme.surface,
+              borderTopColor: theme.accent,
+              shadowColor: theme.shadow,
+              paddingBottom: Math.max(insets.bottom, Spacing.three),
+            },
+          ]}
+        >
+          <View style={styles.rankBannerHeader}>
+            <View style={[styles.rankPill, { backgroundColor: theme.accent }]}>
+              <ThemedText type="smallBold" style={styles.rankPillText}>
+                {currentRank ? `#${currentRank}` : '—'}
+              </ThemedText>
+            </View>
+            <View style={styles.rankBannerText}>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                Your Team
+              </ThemedText>
+              <ThemedText type="subtitle" numberOfLines={1}>
+                {currentGroup.name}
+              </ThemedText>
+            </View>
+            <ThemedText type="subtitle" style={{ color: theme.accent }}>
+              {currentCompletion}%
+            </ThemedText>
+          </View>
+          <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: theme.accent,
+                  width: `${Math.min(100, Math.max(0, currentCompletion))}%`,
+                },
+              ]}
+            />
+          </View>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            {currentGroup.activitiesCompleted} of {currentGroup.activitiesTotal} activities complete
           </ThemedText>
         </ThemedView>
-      )}
+      ) : null}
     </ThemedView>
   );
 }
@@ -119,8 +167,8 @@ export default function LeaderboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: Spacing.four,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
   },
   title: {
     marginBottom: Spacing.three,
@@ -151,6 +199,9 @@ const styles = StyleSheet.create({
   third: {
     opacity: 0.92,
   },
+  list: {
+    flex: 1,
+  },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -176,14 +227,48 @@ const styles = StyleSheet.create({
     height: 1,
     marginVertical: Spacing.two,
   },
-  stickyStatus: {
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.four,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 16 },
+  rankBanner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: 2,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
+    gap: Spacing.two,
+    shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 5,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  rankBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  rankPill: {
+    minWidth: 52,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  rankPillText: {
+    color: '#FFF',
+  },
+  rankBannerText: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
   },
 });

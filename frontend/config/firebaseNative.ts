@@ -6,7 +6,6 @@ import { getAuth, initializeAuth, Auth, Firestore, getReactNativePersistence } f
 import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Load Firebase config from environment with proper fallbacks
 const getConfigValue = (key: string): string => {
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     const value = process.env[key];
@@ -21,8 +20,8 @@ const getConfigValue = (key: string): string => {
     // Constants may not be available in all contexts.
   }
 
-  if (typeof globalThis !== 'undefined' && (globalThis as any)[key]) {
-    return (globalThis as any)[key];
+  if (typeof globalThis !== 'undefined' && (globalThis as Record<string, string>)[key]) {
+    return (globalThis as Record<string, string>)[key];
   }
 
   return '';
@@ -37,22 +36,21 @@ const firebaseConfig = {
   appId: getConfigValue('EXPO_PUBLIC_FIREBASE_APP_ID'),
 };
 
-// eslint-disable-next-line no-console
 if (__DEV__) {
-  // eslint-disable-next-line no-console
   console.log(`[Firebase] Initializing for ${Platform.OS} (Project: ${firebaseConfig.projectId || 'Unknown'})`);
 }
 
 if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
-  const errorMsg = '[Firebase] Missing critical configuration. Ensure EXPO_PUBLIC_FIREBASE_* variables are set.';
-  // eslint-disable-next-line no-console
-  console.error(errorMsg);
+  console.error('[Firebase] Missing critical configuration. Ensure EXPO_PUBLIC_FIREBASE_* variables are set.');
 }
 
-// Internal singletons
 let firebaseApp: FirebaseApp | undefined;
 let firebaseAuth: Auth | undefined;
 let firebaseFirestore: Firestore | undefined;
+
+export function isFirebaseConfigured(): boolean {
+  return Boolean(firebaseConfig.projectId && firebaseConfig.apiKey);
+}
 
 export const getFirebaseApp = (): FirebaseApp => {
   if (!firebaseApp) {
@@ -69,13 +67,11 @@ export const getFirebaseAuth = (): Auth => {
     firebaseAuth = getAuth(app);
   } else {
     try {
-      // Attempt to get existing instance to prevent "already registered" errors during Fast Refresh
-      firebaseAuth = getAuth(app);
-    } catch (e) {
-      // Initialize with Persistence if not already registered
       firebaseAuth = initializeAuth(app, {
         persistence: getReactNativePersistence(AsyncStorage),
       });
+    } catch {
+      firebaseAuth = getAuth(app);
     }
   }
   return firebaseAuth;
