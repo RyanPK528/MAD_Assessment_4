@@ -1,81 +1,117 @@
 import { Link } from 'expo-router';
-import { SafeAreaView, ScrollView, StyleSheet, View, TouchableOpacity } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { useCallback, useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { ScrollView, StyleSheet, View, RefreshControl } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
-import { useThemeContext } from '@/components/ThemeContext';
+import { getFirebaseAuth, isFirebaseConfigured } from '@/config/firebaseNative';
+import {
+  fetchCurrentGroupStats,
+  fetchLeaderboardEntries,
+  syncPendingResults,
+} from '@/services/activityResultService';
 import { Spacing } from '@/constants/theme';
-
-const userName = 'Alya';
-const currentGroup = {
-  name: 'Group Orion',
-  grade: 10,
-  activitiesCompleted: 4,
-  activitiesTotal: 7,
-  memberCount: 12,
-  totalScore: 1820,
-};
-
-const recentActivities = [
-  { id: '1', icon: '🚀', name: 'Rocket Launch Lab', score: 92, attemptNumber: 2 },
-  { id: '2', icon: '🧪', name: 'Reaction Board Trial', score: 86, attemptNumber: 1 },
-  { id: '3', icon: '🌪️', name: 'Wind Turbine Build', score: 78, attemptNumber: 1 },
-];
-
-const leaderboardPreview = [
-  { rank: 1, name: 'Team Nova', score: 86 },
-  { rank: 2, name: 'Group Orion', score: 72 },
-  { rank: 3, name: 'STEM Squad', score: 58 },
-];
+import { getUserProfile } from '@/services/authService';
 
 export default function DashboardScreen() {
   const theme = useTheme();
-  const { mode, toggleMode } = useThemeContext();
-  const isDark = mode === 'dark';
 
-  const completedActivities = currentGroup.activitiesCompleted;
-  const progressPercentage = Math.round((completedActivities / currentGroup.activitiesTotal) * 100);
+  const [teamName, setTeamName] = useState('Team');
+  const [memberPreview, setMemberPreview] = useState('');
+  const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
+  const [leaderboardPreview, setLeaderboardPreview] = useState<{ rank: number; name: string; score: number }[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    await syncPendingResults();
+    const auth = getFirebaseAuth();
+    if (auth && isFirebaseConfigured()) {
+      const user = auth.currentUser;
+      if (user) {
+        const profile = await getUserProfile(user.uid);
+        if (profile) {
+          setTeamName(profile.teamName);
+          setMemberPreview(profile.memberFirstNames.slice(0, 3).join(', '));
+        }
+      }
+    }
+    const [group, board] = await Promise.all([fetchCurrentGroupStats(), fetchLeaderboardEntries()]);
+    setCurrentGroup(group);
+    setLeaderboardPreview(board.slice(0, 3).map((e) => ({ rank: e.rank, name: e.name, score: e.completionPercent })));
+  }, []);
+
+  useEffect(() => {
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      return;
+    }
+    const unsub = onAuthStateChanged(auth, () => {
+      void load();
+    });
+    return unsub;
+  }, [load]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const completedActivities = currentGroup?.activitiesCompleted ?? 0;
+  const activitiesTotal = currentGroup?.activitiesTotal ?? 7;
+  const progressPercentage = Math.round((completedActivities / activitiesTotal) * 100);
 
   return (
-    <ThemedView style={[styles.outer, { backgroundColor: theme.background }]}> 
+    <ThemedView style={[styles.outer, { backgroundColor: theme.background }]}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
           <View style={styles.header}>
             <View>
-              <ThemedText type="small" style={[styles.greeting, { color: theme.textSecondary }]}>Good afternoon, {userName}</ThemedText>
-              <ThemedText type="subtitle" style={[styles.teamName, { color: theme.textPrimary }]}>{currentGroup.name}</ThemedText>
+              <ThemedText type="small" style={[styles.greeting, { color: theme.textSecondary }]}>
+                Team account
+              </ThemedText>
+              <ThemedText type="subtitle" style={[styles.teamName, { color: theme.textPrimary }]}>
+                {currentGroup?.name ?? teamName}
+              </ThemedText>
+              {memberPreview ? (
+                <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                  Members: {memberPreview}
+                </ThemedText>
+              ) : null}
             </View>
-            <TouchableOpacity style={[styles.themeToggle, { backgroundColor: theme.backgroundSelected }]} onPress={toggleMode}>
-              <SymbolView
-                name={isDark ? 'sun.max.fill' : 'moon.fill'}
-                size={20}
-                tintColor={isDark ? '#FFD54F' : theme.textSecondary}
-              />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.statsContainer}>
-            <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+            <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <ThemedText type="smallBold">Completed</ThemedText>
-              <ThemedText type="subtitle" style={styles.statValue}>{completedActivities}/{currentGroup.activitiesTotal}</ThemedText>
+              <ThemedText type="subtitle" style={styles.statValue}>
+                {completedActivities}/{activitiesTotal}
+              </ThemedText>
             </View>
-            <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+            <View style={[styles.statBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
               <ThemedText type="smallBold">Members</ThemedText>
-              <ThemedText type="subtitle" style={styles.statValue}>{currentGroup.memberCount}</ThemedText>
+              <ThemedText type="subtitle" style={styles.statValue}>
+                {currentGroup?.memberCount ?? '—'}
+              </ThemedText>
             </View>
           </View>
 
           <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.textPrimary }]}>Quick start</ThemedText>
           <View style={styles.buttonContainer}>
-            <Link href="/activities" style={[styles.actionButton, { backgroundColor: theme.accent }]}> 
+            <Link href="/activities" style={[styles.actionButton, { backgroundColor: theme.accent }]}>
               <ThemedText type="subtitle">View activities</ThemedText>
             </Link>
           </View>
 
           <ThemedText type="subtitle" style={[styles.sectionTitle, { color: theme.textPrimary }]}>Leaderboard preview</ThemedText>
-          <View style={[styles.leaderboardPreview, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
+          <View style={[styles.leaderboardPreview, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <View style={styles.leaderboardHeaderRow}>
               <ThemedText type="smallBold" style={{ color: theme.textPrimary }}>Top teams</ThemedText>
               <Link href="/leaderboard" style={styles.leaderboardLink}>
@@ -83,21 +119,25 @@ export default function DashboardScreen() {
                 <ThemedText type="small" style={[styles.leaderboardArrow, { color: theme.accent }]}>›</ThemedText>
               </Link>
             </View>
-            {leaderboardPreview.map((team) => (
-              <View key={team.rank} style={styles.leaderboardItem}>
-                <ThemedText type="subtitle" style={[styles.rank, { color: theme.accent }]}>{team.rank}</ThemedText>
-                <View style={styles.teamInfo}>
-                  <ThemedText type="body" style={{ color: theme.textPrimary }}>{team.name}</ThemedText>
+            {leaderboardPreview.length === 0 ? (
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>No rankings yet.</ThemedText>
+            ) : (
+              leaderboardPreview.map((team) => (
+                <View key={team.rank} style={styles.leaderboardItem}>
+                  <ThemedText type="subtitle" style={[styles.rank, { color: theme.accent }]}>{team.rank}</ThemedText>
+                  <View style={styles.teamInfo}>
+                    <ThemedText type="body" style={{ color: theme.textPrimary }}>{team.name}</ThemedText>
+                  </View>
+                  <ThemedText type="body" style={{ color: theme.success }}>{team.score}%</ThemedText>
                 </View>
-                <ThemedText type="body" style={{ color: theme.success }}>{team.score}%</ThemedText>
-              </View>
-            ))}
-            <View style={[styles.progressContainer, { backgroundColor: theme.backgroundSelected }]}> 
+              ))
+            )}
+            <View style={[styles.progressContainer, { backgroundColor: theme.backgroundSelected }]}>
               <View style={styles.progressLabelRow}>
                 <ThemedText type="small">Group progress</ThemedText>
                 <ThemedText type="smallBold">{progressPercentage}%</ThemedText>
               </View>
-              <View style={[styles.progressBarBackground, { backgroundColor: theme.background }]}> 
+              <View style={[styles.progressBarBackground, { backgroundColor: theme.background }]}>
                 <View style={[styles.progressBarFill, { width: `${progressPercentage}%`, backgroundColor: theme.accent }]} />
               </View>
             </View>
@@ -109,12 +149,8 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  outer: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
+  outer: { flex: 1 },
+  safeArea: { flex: 1 },
   scrollContent: {
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.four,
@@ -122,26 +158,10 @@ const styles = StyleSheet.create({
     gap: Spacing.four,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     marginBottom: Spacing.four,
   },
-  greeting: {
-    fontSize: 14,
-    marginBottom: Spacing.one,
-  },
-  teamName: {
-    fontSize: 28,
-    lineHeight: 34,
-  },
-  themeToggle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+  greeting: { fontSize: 14, marginBottom: Spacing.one },
+  teamName: { fontSize: 28, lineHeight: 34 },
   statsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -155,38 +175,14 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     borderWidth: 1,
   },
-  statValue: {
-    marginTop: Spacing.two,
-    fontSize: 22,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  buttonContainer: {
-    gap: Spacing.three,
-  },
+  statValue: { marginTop: Spacing.two, fontSize: 22 },
+  sectionTitle: { fontSize: 18, fontWeight: '700' },
+  buttonContainer: { gap: Spacing.three },
   actionButton: {
     borderRadius: Spacing.three,
     paddingVertical: Spacing.four,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  secondaryButton: {
-    borderWidth: 1,
-  },
-  recentCard: {
-    borderRadius: Spacing.three,
-    padding: Spacing.four,
-    borderWidth: 1,
-    gap: Spacing.two,
-  },
-  activityName: {
-    marginBottom: Spacing.one,
-  },
-  recentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
   },
   leaderboardPreview: {
     borderRadius: Spacing.three,
@@ -200,47 +196,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: Spacing.two,
   },
-  leaderboardLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-  },
-  leaderboardArrow: {
-    fontSize: 18,
-    lineHeight: 20,
-  },
+  leaderboardLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.one },
+  leaderboardArrow: { fontSize: 18, lineHeight: 20 },
   leaderboardItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: Spacing.two,
   },
-  rank: {
-    minWidth: 36,
-    fontWeight: '700',
-  },
-  teamInfo: {
-    flex: 1,
-    marginHorizontal: Spacing.two,
-  },
-  progressContainer: {
-    marginTop: Spacing.three,
-    borderRadius: Spacing.three,
-    padding: Spacing.three,
-  },
+  rank: { minWidth: 36, fontWeight: '700' },
+  teamInfo: { flex: 1, marginHorizontal: Spacing.two },
+  progressContainer: { marginTop: Spacing.three, borderRadius: Spacing.three, padding: Spacing.three },
   progressLabelRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: Spacing.two,
   },
-  progressBarBackground: {
-    height: 10,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
+  progressBarBackground: { height: 10, borderRadius: 999, overflow: 'hidden' },
+  progressBarFill: { height: '100%', borderRadius: 999 },
 });

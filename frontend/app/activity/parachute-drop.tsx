@@ -1,32 +1,357 @@
-import { StyleSheet } from 'react-native';
+import { CameraView, useCameraPermissions,useMicrophonePermissions } from 'expo-camera';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, Image, StyleSheet, TextInput, View } from 'react-native';
 
+import { ActivityLayout } from '@/components/activity/ActivityLayout';
+import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
+import { PhysicsResultPanel } from '@/components/activity/PhysicsResultPanel';
+import { SessionTimer } from '@/components/activity/SessionTimer';
+import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useTheme } from '@/hooks/use-theme';
+import { saveActivityResult } from '@/services/activityResultService';
+import {
+  createEmptyTrial,
+  createParachuteDropController,
+  ParachuteDropState,
+  SESSION_MAX_SEC,
+} from '@/services/parachuteDropService';
 import { Spacing } from '@/constants/theme';
 
 export default function ParachuteDropScreen() {
-  return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        Parachute Drop Challenge
-      </ThemedText>
-      <ThemedText type="body">
-        This screen is reserved as a clean engineering placeholder for the parachute drop challenge.
-      </ThemedText>
-      <ThemedText type="small">
-        Use this component to hook in drop simulation data and dynamic altitude/payload metrics.
-      </ThemedText>
+  const theme = useTheme();
+  const [state, setState] = useState<ParachuteDropState>({
+    phase: 'setup',
+    dropHeightM: 1.0,
+    toyMassKg: 0.2,
+    trials: [createEmptyTrial(0), createEmptyTrial(1), createEmptyTrial(2)],
+    activeTrialIndex: 0,
+    sessionTimerSec: 0,
+    sessionRunning: false,
+    dropTimerSec: 0,
+    dropTimerRunning: false,
+    reflection: '',
+    message: 'Enter drop height and toy mass, then run up to 3 prototype tests.',
+  });
+  const [heightInput, setHeightInput] = useState('1.0');
+  const [massInput, setMassInput] = useState('0.2');
+  const [contactInput, setContactInput] = useState('');
+  const [showCamera, setShowCamera] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [permission, requestPermission] = useCameraPermissions();
+  const [micPermission, requestMicPermission] = useMicrophonePermissions();
+  const [isRecording, setIsRecording] = useState(false);
+  const [selfRating, setSelfRating] = useState('3');
+  const [comments, setComments] = useState('');
+  const [submittedAttempts, setSubmittedAttempts] = useState<{ trialsCompleted: number; sessionTimerSec: number }[]>([]);
+  const cameraRef = useRef<CameraView>(null);
+
+  const controller = useMemo(() => {
+    const ctrl = createParachuteDropController(setState);
+    return ctrl;
+  }, []);
+
+  useEffect(() => () => controller.stop(), [controller]);
+
+  const activeTrial = state.trials[state.activeTrialIndex];
+
+  const handleRecordVideo = async () => {
+    // 2. Use the variables returned by the hooks inside your function
+    
+    // Check and request camera permission
+    let camStatus = permission;
+    if (!camStatus?.granted) {
+      camStatus = await requestPermission();
+    }
+    
+    // Check and request microphone permission
+    let micStatus = micPermission;
+    if (!micStatus?.granted) {
+      micStatus = await requestMicPermission();
+    }
+
+    // Only show camera if BOTH are granted
+    if (camStatus?.granted && micStatus?.granted) {
+      setShowCamera(true);
+    }
+  };
+  const handleStartRecording = async () => {
+    // Prevent starting if already recording or camera isn't ready
+    if (!cameraRef.current || isRecording) return;
+    
+    try {
+      setIsRecording(true); 
+      console.log("Attempting to start recording...");
+      
+      const video = await cameraRef.current.recordAsync({ maxDuration: 30 });
+      
+      console.log("Recording finished successfully:", video?.uri);
+      if (video?.uri) {
+        controller.setVideoUri(video.uri);
+      }
+    } catch (error) {
+      console.error("ACTUAL NATIVE ERROR:", error); 
+    } finally {
+      setIsRecording(false); 
+      // 🚨 Safely close the camera ONLY after the video is fully saved or cancelled
+      setShowCamera(false); 
+    }
+  };
+
+  const handleStopVideo = () => {
+    if (cameraRef.current && isRecording) {
+      console.log("Stopping recording...");
+      // Tell the camera to stop. DO NOT close the camera here. 
+      // The handleStartRecording function above will close it when the file is ready.
+      cameraRef.current.stopRecording();
+    } else {
+      // If they haven't started recording yet, it's safe to just close the camera
+      setShowCamera(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    try {
+      await saveActivityResult('parachute-drop', {
+        dropHeightM: state.dropHeightM,
+        toyMassKg: state.toyMassKg,
+        trials: state.trials,
+        sessionTimerSec: state.sessionTimerSec,
+      }, { reflection: `${state.reflection} | Self-rating: ${selfRating}/5 | ${comments}` });
+      setSubmittedAttempts((current) => [
+        { trialsCompleted: state.trials.filter((t) => t.fallTimeSec !== null).length, sessionTimerSec: state.sessionTimerSec },
+        ...current,
+      ].slice(0, 5));
+      setState((s) => ({ ...s, message: 'Results saved.' }));
+    } catch {
+      setState((s) => ({ ...s, message: 'Saved offline.' }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+ if (showCamera && permission?.granted) {
+    return (
+      <View style={styles.cameraContainer}>
+        <CameraView ref={cameraRef} style={styles.camera} mode="video" facing="back" />
+        
+        <View style={styles.cameraControls}>
+          {/* This makes the button react to the state we created */}
+          <Button 
+            title={isRecording ? "Recording..." : "Start recording"} 
+            onPress={handleStartRecording} 
+            disabled={isRecording} 
+          />
+          
+          <Button 
+            title={isRecording ? "Stop & Save" : "Cancel & Close"} 
+            onPress={handleStopVideo} 
+          />
+        </View>
+      </View>
+    );
+  }
+
+  const overviewContent = (
+    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <ThemedText type="subtitle">Description</ThemedText>
+      <ThemedText type="body">Drop a toy from a fixed height, measure fall time and contact time, and compare up to three parachute designs.</ThemedText>
+      <ThemedText type="subtitle">Materials / Equipment</ThemedText>
+      <ThemedText type="body">Toy, parachute prototypes, measuring tape, phone with camera.</ThemedText>
+      <ThemedText type="subtitle">Instructions</ThemedText>
+      <ThemedText type="body">1. Set drop height and toy mass.</ThemedText>
+      <ThemedText type="body">2. Run up to three design trials.</ThemedText>
+      <ThemedText type="body">3. Record fall and contact times, then submit results.</ThemedText>
+      <ThemedText type="subtitle">Diagram</ThemedText>
+      <Image
+        source={require('../../assets/instructions/activity1.png')}
+        style={styles.instructionImage}
+        resizeMode="contain"
+      />
     </ThemedView>
+  );
+
+  const activityContent = (
+      <ThemedView style={styles.container}>
+        <SessionTimer
+          elapsedSec={state.sessionTimerSec}
+          maxSec={SESSION_MAX_SEC}
+          isRunning={state.sessionRunning}
+          onStart={() => controller.startSessionTimer()}
+          onStop={() => controller.stopSessionTimer()}
+          onReset={() => controller.resetSessionTimer()}
+          label="20-minute design session"
+        />
+
+        <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <ThemedText type="subtitle">Setup</ThemedText>
+          <ThemedText type="small">Drop height (m)</ThemedText>
+          <TextInput
+            value={heightInput}
+            onChangeText={(v) => {
+              setHeightInput(v);
+              controller.setDropHeight(Number(v) || 0);
+            }}
+            keyboardType="decimal-pad"
+            style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
+          />
+          <ThemedText type="small">Toy mass (kg)</ThemedText>
+          <TextInput
+            value={massInput}
+            onChangeText={(v) => {
+              setMassInput(v);
+              controller.setMass(Number(v) || 0);
+            }}
+            keyboardType="decimal-pad"
+            style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
+          />
+          <Button title="Begin trials" onPress={() => controller.setPhase('recording')} />
+        </ThemedView>
+
+        {state.phase !== 'setup' && activeTrial && (
+          <>
+            <View style={styles.trialTabs}>
+              {[0, 1, 2].map((i) => (
+                <Button
+                  key={i}
+                  title={`Trial ${i + 1}`}
+                  onPress={() => controller.setActiveTrial(i)}
+                  color={state.activeTrialIndex === i ? theme.accent : undefined}
+                />
+              ))}
+            </View>
+
+            <DesignTrialCard
+              title={activeTrial.label}
+              label={activeTrial.label}
+              onLabelChange={(v) => controller.updateActiveTrial({ label: v })}
+              prediction={activeTrial.prediction}
+              onPredictionChange={(v) => controller.updateActiveTrial({ prediction: v })}
+            />
+
+            <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+              <ThemedText type="subtitle">Drop timer</ThemedText>
+              <ThemedText type="title">
+                {state.dropTimerRunning ? state.dropTimerSec.toFixed(3) : activeTrial.fallTimeSec?.toFixed(3) ?? '0.000'} s
+              </ThemedText>
+              <View style={styles.buttonRow}>
+                {!state.dropTimerRunning ? (
+                  <Button title="Start drop" onPress={() => controller.startDropTimer()} />
+                ) : (
+                  <Button title="Toy hit ground — stop" onPress={() => controller.stopDropTimer()} />
+                )}
+              </View>
+            </ThemedView>
+
+            <ThemedText type="small">Contact time from slow-motion (s)</ThemedText>
+            <TextInput
+              value={contactInput}
+              onChangeText={(v) => {
+                setContactInput(v);
+                controller.setContactTime(Number(v) || 0);
+              }}
+              keyboardType="decimal-pad"
+              placeholder="e.g. 0.05"
+              placeholderTextColor={theme.textSecondary}
+              style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
+            />
+
+            <View style={styles.buttonRow}>
+              <Button title="Record slow-mo video" onPress={handleRecordVideo} />
+              {activeTrial.videoUri && (
+                <ThemedText type="small" style={{ color: theme.success }}>Video saved</ThemedText>
+              )}
+            </View>
+
+            <PhysicsResultPanel
+              values={{
+                impactSpeedMs: activeTrial.impactSpeedMs,
+                accelerationMs2: activeTrial.accelerationMs2,
+                netForceN: activeTrial.netForceN,
+                dragForceN: activeTrial.dragForceN,
+                gForce: activeTrial.gForce,
+              }}
+            />
+          </>
+        )}
+
+        {state.trials.some((t) => t.fallTimeSec !== null) && (
+          <TrialResultsTable
+            rows={state.trials
+              .filter((t) => t.fallTimeSec !== null)
+              .map((t) => ({
+                label: t.label,
+                prediction: t.prediction || '—',
+                outcome: `${t.fallTimeSec?.toFixed(3)} s fall${t.gForce !== null ? `, ${t.gForce.toFixed(1)} g` : ''}`,
+              }))}
+          />
+        )}
+
+        <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
+        <Button
+          title={submitting ? 'Saving…' : 'Submit results'}
+          onPress={handleSubmit}
+          disabled={submitting || !state.trials.some((t) => t.fallTimeSec !== null)}
+        />
+      </ThemedView>
+  );
+
+  const submissionContent = (
+    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+      <ThemedText type="subtitle">Submitted attempts</ThemedText>
+      {submittedAttempts.length === 0 ? (
+        <ThemedText type="small">No submissions yet.</ThemedText>
+      ) : (
+        submittedAttempts.map((attempt, idx) => (
+          <ThemedText key={idx} type="small">
+            Attempt {idx + 1}: {attempt.trialsCompleted} trials, session {attempt.sessionTimerSec}s
+          </ThemedText>
+        ))
+      )}
+      <ThemedText type="subtitle">Theory behind activity</ThemedText>
+      <ThemedText type="body">Parachutes increase air resistance, reducing terminal velocity and impact force through drag.</ThemedText>
+      <ThemedText type="subtitle">Team reflection</ThemedText>
+      <TextInput
+        value={state.reflection}
+        onChangeText={(v) => controller.setReflection(v)}
+        multiline
+        placeholder="Which parachute design was best?"
+        placeholderTextColor={theme.textSecondary}
+        style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]}
+      />
+      <ThemedText type="subtitle">Self-rating (1-5)</ThemedText>
+      <TextInput value={selfRating} onChangeText={setSelfRating} keyboardType="number-pad" style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]} />
+      <ThemedText type="subtitle">Comments</ThemedText>
+      <TextInput value={comments} onChangeText={setComments} multiline style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]} />
+    </ThemedView>
+  );
+
+  return (
+    <ActivityLayout
+      activityName="Parachute Drop Challenge"
+      overviewContent={overviewContent}
+      activityContent={activityContent}
+      submissionContent={submissionContent}
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: Spacing.four,
-    gap: Spacing.three,
+  container: { padding: Spacing.four, gap: Spacing.three, paddingBottom: Spacing.six },
+  card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },
+  instructionImage: {
+    width: '100%',
+    height: 200,
+    marginVertical: Spacing.two,
+    borderRadius: Spacing.two,
   },
-  title: {
-    marginBottom: Spacing.two,
-  },
+  input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
+  buttonRow: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center', flexWrap: 'wrap' },
+  trialTabs: { flexDirection: 'row', gap: Spacing.two },
+  reflection: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, minHeight: 80, textAlignVertical: 'top' },
+  cameraContainer: { flex: 1 },
+  camera: { flex: 1 },
+  cameraControls: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: Spacing.three },
 });

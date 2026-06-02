@@ -1,8 +1,8 @@
 import { useRouter } from 'expo-router';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
-import { createGroup, joinGroup, fetchAvailableGroups, GroupDocument } from '@/services/groupService';
+import { registerUser } from '@/services/authService';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -12,61 +12,33 @@ export default function GroupManagementScreen() {
   const router = useRouter();
   const theme = useTheme();
   const [mode, setMode] = useState<'choice' | 'create' | 'join'>('choice');
-  const [groupName, setGroupName] = useState('');
-  const [gradeLevel, setGradeLevel] = useState('');
-  const [availableGroups, setAvailableGroups] = useState<GroupDocument[]>([]);
+  const [teamName, setTeamName] = useState('');
+  const [memberNames, setMemberNames] = useState('');
+  const [gradeLevel, setGradeLevel] = useState<'Year 5' | 'Year 6' | 'Year 7' | 'Year 8' | 'Year 9' | 'Year 10'>('Year 7');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // In a full app this could be loaded from auth or deep link state.
-  }, []);
-
-  const handleCreateGroup = async () => {
-    if (!groupName.trim() || !gradeLevel.trim()) {
-      Alert.alert('Validation error', 'Please enter a group name and grade level.');
+  const handleCreateTeamAccount = async () => {
+    const members = memberNames.split(',').map((name) => name.trim()).filter(Boolean);
+    if (!teamName.trim() || !email.trim() || !password.trim() || members.length === 0) {
+      Alert.alert('Validation error', 'Please enter team name, member names, email, and password.');
       return;
     }
 
     setLoading(true);
     try {
-      Alert.alert('Success', 'Group created! (Note: full implementation requires user context)');
-      router.push('/dashboard');
+      await registerUser({
+        email,
+        password,
+        teamName,
+        memberFirstNames: members,
+        gradeLevel,
+      });
+      Alert.alert('Success', 'Team account created.');
+      router.replace('/dashboard');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to create group.';
-      Alert.alert('Error', message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleJoinGroup = async (group: GroupDocument) => {
-    setLoading(true);
-    try {
-      Alert.alert('Success', `Joined group: ${group.name}`);
-      router.push('/dashboard');
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to join group.';
-      Alert.alert('Error', message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadAvailableGroups = async () => {
-    if (!gradeLevel.trim()) {
-      Alert.alert('Error', 'Please enter your grade level first.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const groups = await fetchAvailableGroups(Number(gradeLevel));
-      setAvailableGroups(groups);
-      if (groups.length === 0) {
-        Alert.alert('No groups found', 'No groups available for your grade level. Create a new one!');
-      }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Failed to load groups.';
       Alert.alert('Error', message);
     } finally {
       setLoading(false);
@@ -76,54 +48,71 @@ export default function GroupManagementScreen() {
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <ThemedText type="title" style={styles.title}>{mode === 'choice' ? 'Group Management' : mode === 'create' ? 'Create a Group' : 'Join a Group'}</ThemedText>
+        <ThemedText type="title" style={styles.title}>Team Account Setup</ThemedText>
 
         {mode === 'choice' && (
           <View style={styles.choiceSection}>
-            <ThemedText type="subtitle" style={[styles.subtitle, { color: theme.textSecondary }]}>You don't have a group yet. Would you like to create or join one?</ThemedText>
+            <ThemedText type="subtitle" style={[styles.subtitle, { color: theme.textSecondary }]}>Create one team account for your group.</ThemedText>
 
             <Pressable
               style={({ pressed }) => [styles.actionCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressedCard]}
               onPress={() => setMode('create')}>
-              <ThemedText type="subtitle">Create a Group</ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>Start a new classroom team.</ThemedText>
-            </Pressable>
-
-            <Pressable
-              style={({ pressed }) => [styles.actionCard, { backgroundColor: theme.surface, borderColor: theme.border }, pressed && styles.pressedCard]}
-              onPress={() => setMode('join')}>
-              <ThemedText type="subtitle">Join a Group</ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>Find an existing team with your grade.</ThemedText>
+              <ThemedText type="subtitle">Create Team Account</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>Set team name, members, grade, and sign-in credentials.</ThemedText>
             </Pressable>
           </View>
         )}
 
         {mode === 'create' && (
           <ThemedView style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-            <ThemedText type="subtitle" style={styles.formLabel}>Group Name</ThemedText>
+            <ThemedText type="subtitle" style={styles.formLabel}>Team Name</ThemedText>
             <TextInput
-              placeholder="Enter group name"
+              placeholder="Enter team name"
               placeholderTextColor={theme.muted}
               style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
-              value={groupName}
-              onChangeText={setGroupName}
+              value={teamName}
+              onChangeText={setTeamName}
+            />
+            <ThemedText type="subtitle" style={styles.formLabel}>Member First Names</ThemedText>
+            <TextInput
+              placeholder="Comma-separated member names"
+              placeholderTextColor={theme.muted}
+              style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
+              value={memberNames}
+              onChangeText={setMemberNames}
             />
 
             <ThemedText type="subtitle" style={styles.formLabel}>Grade Level</ThemedText>
             <TextInput
-              placeholder="Enter grade level"
+              placeholder="Year 5 to Year 10"
               placeholderTextColor={theme.muted}
               style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
               value={gradeLevel}
-              keyboardType="numeric"
-              onChangeText={setGradeLevel}
+              onChangeText={(value) => setGradeLevel(value as typeof gradeLevel)}
+            />
+            <ThemedText type="subtitle" style={styles.formLabel}>Team Email</ThemedText>
+            <TextInput
+              placeholder="team@example.com"
+              placeholderTextColor={theme.muted}
+              style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
+              value={email}
+              onChangeText={setEmail}
+            />
+            <ThemedText type="subtitle" style={styles.formLabel}>Password</ThemedText>
+            <TextInput
+              secureTextEntry
+              placeholder="Password"
+              placeholderTextColor={theme.muted}
+              style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
+              value={password}
+              onChangeText={setPassword}
             />
 
             <Pressable
               style={({ pressed }) => [styles.submitButton, { backgroundColor: theme.accent }, pressed && styles.buttonPressed]}
               disabled={loading}
-              onPress={handleCreateGroup}>
-              <ThemedText type="subtitle" style={styles.buttonText}>{loading ? 'Creating...' : 'Create Group'}</ThemedText>
+              onPress={handleCreateTeamAccount}>
+              <ThemedText type="subtitle" style={styles.buttonText}>{loading ? 'Creating...' : 'Create Team Account'}</ThemedText>
             </Pressable>
 
             <Pressable
@@ -134,47 +123,6 @@ export default function GroupManagementScreen() {
           </ThemedView>
         )}
 
-        {mode === 'join' && (
-          <ThemedView style={[styles.formCard, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-            <ThemedText type="subtitle" style={styles.formLabel}>Grade Level</ThemedText>
-            <TextInput
-              placeholder="Enter your grade level"
-              placeholderTextColor={theme.muted}
-              style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
-              value={gradeLevel}
-              keyboardType="numeric"
-              onChangeText={setGradeLevel}
-            />
-
-            <Pressable
-              style={({ pressed }) => [styles.submitButton, { backgroundColor: theme.accent }, pressed && styles.buttonPressed]}
-              disabled={loading}
-              onPress={loadAvailableGroups}>
-              <ThemedText type="subtitle" style={styles.buttonText}>{loading ? 'Loading...' : 'Find Groups'}</ThemedText>
-            </Pressable>
-
-            {availableGroups.length > 0 && (
-              <View style={styles.groupsList}>
-                <ThemedText type="subtitle" style={styles.groupsTitle}>Available Groups</ThemedText>
-                {availableGroups.map((group) => (
-                  <Pressable
-                    key={group.id}
-                    style={[styles.groupItem, { backgroundColor: theme.backgroundSelected, borderColor: theme.accent }]}
-                    onPress={() => handleJoinGroup(group)}>
-                    <ThemedText type="body">{group.name}</ThemedText>
-                    <ThemedText type="small" style={{ color: theme.textSecondary }}>Members: {group.memberCount}</ThemedText>
-                  </Pressable>
-                ))}
-              </View>
-            )}
-
-            <Pressable
-              style={({ pressed }) => [styles.secondaryButton, { borderColor: theme.border }, pressed && styles.buttonPressed]}
-              onPress={() => setMode('choice')}>
-              <ThemedText type="subtitle" style={[styles.buttonText, { color: theme.text }]}>Back</ThemedText>
-            </Pressable>
-          </ThemedView>
-        )}
       </ScrollView>
     </ThemedView>
   );
@@ -249,16 +197,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.three,
     borderRadius: Spacing.three,
   },
-  groupsList: {
-    marginTop: Spacing.three,
-    gap: Spacing.two,
-  },
-  groupsTitle: {
-    marginBottom: Spacing.two,
-  },
-  groupItem: {
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    borderWidth: 1,
-  },
+  groupsList: {},
+  groupsTitle: {},
+  groupItem: {},
 });

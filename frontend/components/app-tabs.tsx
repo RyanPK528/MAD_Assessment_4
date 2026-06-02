@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { useColorScheme } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { AppIcon } from '@/components/ui/app-icon';
 
 import { Colors } from '@/constants/theme';
 
@@ -24,21 +24,21 @@ export default function AppTabs() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color }) => <SymbolView name="house.fill" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="house.fill" tintColor={color} size={24} />,
         }}
       />
       <Tabs.Screen
         name="activities"
         options={{
           title: 'Activities',
-          tabBarIcon: ({ color }) => <SymbolView name="list.bullet" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="list.bullet" tintColor={color} size={24} />,
         }}
       />
       <Tabs.Screen
         name="leaderboard"
         options={{
           title: 'Leaderboard',
-          tabBarIcon: ({ color }) => <SymbolView name="chart.bar.fill" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="chart.bar.fill" tintColor={color} size={24} />,
         }}
       />
     </Tabs>

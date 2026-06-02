@@ -8,6 +8,12 @@ export interface Vector3 {
   z: number;
 }
 
+export interface SensorReading {
+  acceleration: Vector3;
+  rotation: Vector3;
+  timestamp: number;
+}
+
 export interface MotionLabState {
   acceleration: Vector3;
   rotation: Vector3;
@@ -15,6 +21,9 @@ export interface MotionLabState {
   breachCount: number;
   isBreachActive: boolean;
   lastUpdateAt: number;
+  isRecording: boolean;
+  recordedSensorData: SensorReading[];
+  elapsedRecordingTime: number;
 }
 
 const computeDelta = (current: Vector3, previous: Vector3): number => {
@@ -32,6 +41,10 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
   let lastAcceleration: Vector3 = { x: 0, y: 0, z: 0 };
   let lastRotation: Vector3 = { x: 0, y: 0, z: 0 };
   let breachCount = 0;
+  let isRecording = false;
+  let recordedSensorData: SensorReading[] = [];
+  let recordingStartTime: number | null = null;
+  let timerInterval: ReturnType<typeof setInterval> | null = null;
 
   const publishState = () => {
     const smoothnessScore = safeNormalize(
@@ -45,6 +58,9 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
       breachCount,
       isBreachActive: smoothnessScore < 40,
       lastUpdateAt: Date.now(),
+      isRecording,
+      recordedSensorData: [...recordedSensorData],
+      elapsedRecordingTime: recordingStartTime ? (Date.now() - recordingStartTime) / 1000 : 0,
     });
   };
 
@@ -60,7 +76,7 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
   const start = () => {
     // Sensors are not available on web; skip initialization
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line no-console
+       
       console.warn('[MotionLab] Accelerometer and Gyroscope not available on web platform');
       return;
     }
@@ -79,6 +95,15 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
       lastAcceleration = currentAcceleration;
 
       evaluateBreach(accelDelta, 0);
+
+      if (isRecording) {
+        recordedSensorData.push({
+          acceleration: currentAcceleration,
+          rotation: { ...lastRotation },
+          timestamp: Date.now(),
+        });
+      }
+
       publishState();
     });
 
@@ -106,5 +131,42 @@ export function createMotionLabController(onUpdate: (state: MotionLabState) => v
     Gyroscope.setUpdateInterval(1000);
   };
 
-  return { start, stop };
+  const startRecording = () => {
+    isRecording = true;
+    recordedSensorData = [];
+    recordingStartTime = Date.now();
+    
+    // Start a timer to refresh the UI for the elapsed time display
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      publishState();
+    }, 100);
+    
+    publishState();
+  };
+
+  const stopRecording = () => {
+    isRecording = false;
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    publishState();
+  };
+
+  const resetState = () => {
+    stopRecording();
+    breachCount = 0;
+    recordedSensorData = [];
+    recordingStartTime = null;
+    publishState();
+  };
+
+  return { 
+    start, 
+    stop, 
+    startRecording, 
+    stopRecording, 
+    resetState 
+  };
 }

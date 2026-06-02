@@ -8,21 +8,32 @@ service cloud.firestore {
       allow read: if request.auth.uid == userId;
       allow create: if request.auth.uid == userId &&
                        request.resource.data.uid == request.auth.uid &&
-                       request.resource.data.grade > 0;
+                       request.resource.data.grade > 0 &&
+                       request.resource.data.teamName is string &&
+                       request.resource.data.memberFirstNames is list &&
+                       request.resource.data.memberFirstNames.size() > 0;
       allow update: if request.auth.uid == userId &&
                        (request.resource.data.groupId == null || 
-                        existsAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)));
+                        existsAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId))) &&
+                       request.resource.data.teamName is string &&
+                       request.resource.data.memberFirstNames is list;
     }
 
-    // Groups: Members can read their own group. Requires grade level match.
+    // Groups: authenticated users can read all groups for leaderboard display.
+    // Members can create/update their own group; seed data can be managed in development.
     match /groups/{groupId} {
-      allow read: if request.auth != null &&
-                     request.auth.uid in resource.data.memberIds;
+      allow read: if request.auth != null;
       allow create: if request.auth != null &&
                        request.resource.data.grade > 0 &&
-                       request.resource.data.memberIds[0] == request.auth.uid;
+                       (
+                         (request.resource.data.memberIds.size() > 0 &&
+                          request.resource.data.memberIds[0] == request.auth.uid) ||
+                         request.resource.data.isSeedData == true
+                       );
       allow update: if request.auth != null &&
                        request.auth.uid in resource.data.memberIds;
+      allow delete: if request.auth != null &&
+                       resource.data.isSeedData == true;
     }
 
     // Leaderboard: Public read access to encourage engagement.

@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 
+import { AppIcon } from '@/components/ui/app-icon';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TabsLayout() {
@@ -29,35 +29,28 @@ export default function TabsLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
-          tabBarIcon: ({ color }) => <SymbolView name="house.fill" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="house.fill" tintColor={color} size={24} />,
         }}
       />
       <Tabs.Screen
         name="activities"
         options={{
           title: 'Activities',
-          tabBarIcon: ({ color }) => <SymbolView name="list.bullet" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="list.bullet" tintColor={color} size={24} />,
         }}
       />
       <Tabs.Screen
         name="leaderboard"
         options={{
           title: 'Leaderboard',
-          tabBarIcon: ({ color }) => <SymbolView name="chart.bar.fill" tintColor={color} size={24} />,
-        }}
-      />
-      <Tabs.Screen
-        name="group"
-        options={{
-          title: 'Group',
-          tabBarIcon: ({ color }) => <SymbolView name="person.3.fill" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="chart.bar.fill" tintColor={color} size={24} />,
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: 'Settings',
-          tabBarIcon: ({ color }) => <SymbolView name="gearshape.fill" tintColor={color} size={24} />,
+          tabBarIcon: ({ color }) => <AppIcon name="gearshape.fill" tintColor={color} size={24} />,
         }}
       />
     </Tabs>

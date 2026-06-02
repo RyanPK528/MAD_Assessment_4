@@ -72,7 +72,7 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingTrai
 
     // Sensors not available on web
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line no-console
+       
       console.warn('[BreathingTrainer] Accelerometer not available on web platform');
       intervalHandle = setInterval(() => {
         secondsElapsed += 1;

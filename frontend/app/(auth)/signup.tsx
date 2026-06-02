@@ -1,6 +1,6 @@
 import { useRouter, Link } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { registerUser } from '../../services/authService';
 import { ThemedText } from '@/components/themed-text';
@@ -11,34 +11,33 @@ export default function SignupScreen() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [firstName, setFirstName] = useState('');
-  const [grade, setGrade] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [memberNames, setMemberNames] = useState('');
+  const [gradeLevel, setGradeLevel] = useState<'Year 5' | 'Year 6' | 'Year 7' | 'Year 8' | 'Year 9' | 'Year 10'>('Year 7');
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
-    // eslint-disable-next-line no-console
+     
     console.log('[Signup] Form submitted');
     
-    const parsedGrade = Number(grade);
-    if (!firstName.trim() || !email.trim() || !password.trim() || Number.isNaN(parsedGrade) || parsedGrade <= 0) {
-      const validationMsg = 'Please fill every field and enter a valid grade level.';
-      // eslint-disable-next-line no-console
+    const members = memberNames.split(',').map((name) => name.trim()).filter(Boolean);
+    if (!teamName.trim() || members.length === 0 || !email.trim() || !password.trim()) {
+      const validationMsg = 'Please provide team name, comma-separated member first names, email, and password.';
+       
       console.log('[Signup] Validation failed:', validationMsg);
       Alert.alert('Registration error', validationMsg);
       return;
     }
 
     setLoading(true);
-    // eslint-disable-next-line no-console
+     
     console.log('[Signup] Calling registerUser...');
     try {
-      await registerUser({ email, password, firstName, grade: parsedGrade });
-      // eslint-disable-next-line no-console
-      console.log('[Signup] Registration successful, redirecting to group management');
-      router.push('/group-management');
+      await registerUser({ email, password, teamName, memberFirstNames: members, gradeLevel });
+      router.replace('/dashboard');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Sign-up failed.';
-      // eslint-disable-next-line no-console
+       
       console.error('[Signup] Registration error:', message);
       Alert.alert('Sign-up error', message);
     } finally {
@@ -52,11 +51,18 @@ export default function SignupScreen() {
         Sign Up
       </ThemedText>
       <TextInput
-        onChangeText={setFirstName}
-        placeholder="First Name"
+        onChangeText={setTeamName}
+        placeholder="Team Name"
         placeholderTextColor="#999"
         style={styles.input}
-        value={firstName}
+        value={teamName}
+      />
+      <TextInput
+        onChangeText={setMemberNames}
+        placeholder="Member First Names (comma-separated)"
+        placeholderTextColor="#999"
+        style={styles.input}
+        value={memberNames}
       />
       <TextInput
         autoCapitalize="none"
@@ -76,14 +82,13 @@ export default function SignupScreen() {
         style={styles.input}
         value={password}
       />
-      <TextInput
-        keyboardType="numeric"
-        onChangeText={setGrade}
-        placeholder="Grade Level"
-        placeholderTextColor="#999"
-        style={styles.input}
-        value={grade}
-      />
+      <View style={styles.gradeRow}>
+        {(['Year 5', 'Year 6', 'Year 7', 'Year 8', 'Year 9', 'Year 10'] as const).map((year) => (
+          <Pressable key={year} onPress={() => setGradeLevel(year)} style={[styles.gradeChip, gradeLevel === year ? styles.gradeChipActive : null]}>
+            <ThemedText type="small">{year}</ThemedText>
+          </Pressable>
+        ))}
+      </View>
       <Pressable disabled={loading} onPress={handleSignup} style={styles.button}>
         <ThemedText type="subtitle">{loading ? 'Creating account…' : 'Create Account'}</ThemedText>
       </Pressable>
@@ -116,6 +121,20 @@ const styles = StyleSheet.create({
     padding: Spacing.four,
     borderRadius: Spacing.three,
     alignItems: 'center',
+    backgroundColor: '#3E78FF',
+  },
+  gradeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+  },
+  gradeChip: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+    borderRadius: Spacing.two,
+    backgroundColor: '#1F1F2A',
+  },
+  gradeChipActive: {
     backgroundColor: '#3E78FF',
   },
   link: {

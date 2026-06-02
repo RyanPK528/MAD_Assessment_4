@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   runTransaction,
@@ -8,7 +9,8 @@ import {
   where,
 } from 'firebase/firestore';
 import { getFirebaseFirestore } from '../config/firebaseNative';
-import { UserProfile } from './authService';
+import { createUniqueTeamDiscriminatorId } from '../utils/groupDiscriminator';
+import { TeamAccountProfile } from './authService';
 
 export interface GroupDocument {
   id: string;
@@ -24,36 +26,40 @@ export interface GroupDocument {
 const GROUPS_COLLECTION = 'groups';
 const USERS_COLLECTION = 'users';
 
-const generateDiscriminatorCode = (): string => {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  return Array.from({ length: 6 })
-    .map(() => alphabet[Math.floor(Math.random() * alphabet.length)])
-    .join('');
-};
+export async function fetchGroupForUser(uid: string): Promise<GroupDocument | null> {
+  if (!uid) return null;
 
-const createUniqueTeamCode = async (): Promise<string> => {
   const firestore = getFirebaseFirestore();
-  const groupsRef = collection(firestore, GROUPS_COLLECTION);
+  const userSnap = await getDoc(doc(firestore, USERS_COLLECTION, uid));
+  if (!userSnap.exists()) return null;
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = generateDiscriminatorCode();
-    const existing = await getDocs(query(groupsRef, where('teamDiscriminatorId', '==', candidate)));
-    if (existing.empty) {
-      return candidate;
-    }
-  }
+  const groupId = String(userSnap.data().groupId ?? '');
+  if (!groupId) return null;
 
-  throw new Error('Unable to generate a unique team code at this time. Please try again.');
-};
+  const groupSnap = await getDoc(doc(firestore, GROUPS_COLLECTION, groupId));
+  if (!groupSnap.exists()) return null;
 
-export async function createGroup(name: string, creator: UserProfile): Promise<GroupDocument> {
+  const data = groupSnap.data();
+  return {
+    id: groupSnap.id,
+    name: String(data.name ?? 'Unnamed Group'),
+    grade: Number(data.grade ?? 0),
+    teamDiscriminatorId: String(data.teamDiscriminatorId ?? ''),
+    memberIds: Array.isArray(data.memberIds) ? data.memberIds.map(String) : [],
+    createdAt: data.createdAt,
+    completedActivitiesCount: Number(data.completedActivitiesCount ?? 0),
+    lastProgressUpdatedAt: data.lastProgressUpdatedAt,
+  };
+}
+
+export async function createGroup(name: string, creator: TeamAccountProfile): Promise<GroupDocument> {
   if (!name.trim()) {
     throw new Error('Group name cannot be empty.');
   }
 
   try {
     const firestore = getFirebaseFirestore();
-    const teamDiscriminatorId = await createUniqueTeamCode();
+    const teamDiscriminatorId = await createUniqueTeamDiscriminatorId();
     const groupRef = doc(collection(firestore, GROUPS_COLLECTION));
     const newGroup: Omit<GroupDocument, 'id'> = {
       name: name.trim(),
@@ -81,7 +87,7 @@ export async function createGroup(name: string, creator: UserProfile): Promise<G
   }
 }
 
-export async function joinGroup(teamCode: string, user: UserProfile): Promise<GroupDocument> {
+export async function joinGroup(teamCode: string, user: TeamAccountProfile): Promise<GroupDocument> {
   const normalizedCode = teamCode.trim().toUpperCase();
 
   if (normalizedCode.length !== 6) {

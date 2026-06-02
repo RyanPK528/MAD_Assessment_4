@@ -1,64 +1,165 @@
-import { FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { getFirebaseAuth } from '@/config/firebaseNative';
+import {
+  fetchCurrentGroupStats,
+  fetchLeaderboardEntries,
+  LeaderboardEntry,
+  syncPendingResults,
+} from '@/services/activityResultService';
 import { Spacing } from '@/constants/theme';
 
-const mockLeaderboard = [
-  { rank: 1, name: 'Team Nova', grade: 10, completedActivitiesCount: 6, completionPercent: 85.7 },
-  { rank: 2, name: 'Group Orion', grade: 11, completedActivitiesCount: 5, completionPercent: 71.4 },
-  { rank: 3, name: 'STEM Squad', grade: 10, completedActivitiesCount: 4, completionPercent: 57.1 },
-  { rank: 4, name: 'Lab Beta', grade: 9, completedActivitiesCount: 3, completionPercent: 42.8 },
-  { rank: 5, name: 'Spark Crew', grade: 10, completedActivitiesCount: 2, completionPercent: 28.6 },
-];
+const STICKY_BANNER_HEIGHT = 120;
 
 export default function LeaderboardScreen() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
+  const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    await syncPendingResults();
+    const [board, group] = await Promise.all([fetchLeaderboardEntries(), fetchCurrentGroupStats()]);
+    setEntries(board);
+    setCurrentGroup(group);
+  }, []);
+
+  useEffect(() => {
+    const auth = getFirebaseAuth();
+    if (!auth) {
+      return;
+    }
+    const unsub = onAuthStateChanged(auth, () => {
+      void load();
+    });
+    return unsub;
+  }, [load]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
+
+  const podium = entries.slice(0, 3);
+  const rest = entries.slice(3);
+  const currentEntry = currentGroup
+    ? entries.find((entry) => entry.groupId === currentGroup.groupId)
+    : null;
+  const currentRank = currentEntry?.rank ?? null;
+  const currentCompletion = currentEntry?.completionPercent ?? currentGroup?.completionPercent ?? 0;
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
+    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
       <ThemedText type="title" style={styles.title}>Leaderboard</ThemedText>
-      <View style={styles.podiumRow}>
-        <View style={[styles.podiumCard, styles.second, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <ThemedText type="subtitle">2</ThemedText>
-          <ThemedText type="body">Group Orion</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>71.4%</ThemedText>
+
+      {podium.length >= 3 ? (
+        <View style={styles.podiumRow}>
+          <View style={[styles.podiumCard, styles.second, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <ThemedText type="subtitle">2</ThemedText>
+            <ThemedText type="body">{podium[1]?.name}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{podium[1]?.completionPercent}%</ThemedText>
+          </View>
+          <View style={[styles.podiumCard, styles.first, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <ThemedText type="subtitle">1</ThemedText>
+            <ThemedText type="body">{podium[0]?.name}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{podium[0]?.completionPercent}%</ThemedText>
+          </View>
+          <View style={[styles.podiumCard, styles.third, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <ThemedText type="subtitle">3</ThemedText>
+            <ThemedText type="body">{podium[2]?.name}</ThemedText>
+            <ThemedText type="small" style={{ color: theme.textSecondary }}>{podium[2]?.completionPercent}%</ThemedText>
+          </View>
         </View>
-        <View style={[styles.podiumCard, styles.first, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <ThemedText type="subtitle">1</ThemedText>
-          <ThemedText type="body">Team Nova</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>85.7%</ThemedText>
-        </View>
-        <View style={[styles.podiumCard, styles.third, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <ThemedText type="subtitle">3</ThemedText>
-          <ThemedText type="body">STEM Squad</ThemedText>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>57.1%</ThemedText>
-        </View>
-      </View>
+      ) : (
+        <ThemedText type="body" style={{ color: theme.textSecondary }}>No groups on the leaderboard yet.</ThemedText>
+      )}
 
       <FlatList
-        data={mockLeaderboard.slice(3)}
-        keyExtractor={(item) => String(item.rank)}
+        data={rest}
+        keyExtractor={(item) => item.groupId}
+        style={styles.list}
+        contentContainerStyle={{
+          paddingBottom: currentGroup ? STICKY_BANNER_HEIGHT + insets.bottom + Spacing.four : Spacing.four,
+        }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         renderItem={({ item }) => (
-          <View style={[styles.rowItem, { backgroundColor: theme.surface, borderColor: theme.border }]}> 
-            <View style={[styles.rankBadge, { backgroundColor: theme.backgroundSelected }]}> 
+          <View style={[styles.rowItem, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={[styles.rankBadge, { backgroundColor: theme.backgroundSelected }]}>
               <ThemedText type="subtitle">{item.rank}</ThemedText>
             </View>
             <View style={styles.rankText}>
               <ThemedText type="body">{item.name}</ThemedText>
-              <ThemedText type="small" style={{ color: theme.textSecondary }}>Grade {item.grade} • {item.completedActivitiesCount}/7</ThemedText>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                Grade {item.grade} • {item.completedActivitiesCount}/7
+              </ThemedText>
             </View>
             <ThemedText type="small" style={{ color: theme.textSecondary }}>{item.completionPercent}%</ThemedText>
           </View>
         )}
         ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+        ListEmptyComponent={
+          entries.length === 0 ? (
+            <ThemedText type="small" style={{ color: theme.textSecondary, padding: Spacing.four }}>
+              Complete activities with your group to appear here.
+            </ThemedText>
+          ) : null
+        }
       />
 
-      <ThemedView style={[styles.stickyStatus, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-        <ThemedText type="subtitle">Your group</ThemedText>
-        <ThemedText type="body" style={{ color: theme.textSecondary }}>Team Pulse • grade 10 • 4 / 7 complete • 57.1%</ThemedText>
-      </ThemedView>
+      {currentGroup ? (
+        <ThemedView
+          style={[
+            styles.rankBanner,
+            {
+              backgroundColor: theme.surface,
+              borderTopColor: theme.accent,
+              shadowColor: theme.shadow,
+              paddingBottom: Math.max(insets.bottom, Spacing.three),
+            },
+          ]}
+        >
+          <View style={styles.rankBannerHeader}>
+            <View style={[styles.rankPill, { backgroundColor: theme.accent }]}>
+              <ThemedText type="smallBold" style={styles.rankPillText}>
+                {currentRank ? `#${currentRank}` : '—'}
+              </ThemedText>
+            </View>
+            <View style={styles.rankBannerText}>
+              <ThemedText type="small" style={{ color: theme.textSecondary }}>
+                Your Team
+              </ThemedText>
+              <ThemedText type="subtitle" numberOfLines={1}>
+                {currentGroup.name}
+              </ThemedText>
+            </View>
+            <ThemedText type="subtitle" style={{ color: theme.accent }}>
+              {currentCompletion}%
+            </ThemedText>
+          </View>
+          <View style={[styles.progressTrack, { backgroundColor: theme.backgroundSelected }]}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  backgroundColor: theme.accent,
+                  width: `${Math.min(100, Math.max(0, currentCompletion))}%`,
+                },
+              ]}
+            />
+          </View>
+          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+            {currentGroup.activitiesCompleted} of {currentGroup.activitiesTotal} activities complete
+          </ThemedText>
+        </ThemedView>
+      ) : null}
     </ThemedView>
   );
 }
@@ -66,8 +167,8 @@ export default function LeaderboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: Spacing.four,
-    gap: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
   },
   title: {
     marginBottom: Spacing.three,
@@ -98,6 +199,9 @@ const styles = StyleSheet.create({
   third: {
     opacity: 0.92,
   },
+  list: {
+    flex: 1,
+  },
   rowItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -121,15 +225,50 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
+    marginVertical: Spacing.two,
   },
-  stickyStatus: {
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.four,
-    borderWidth: 1,
-    shadowOffset: { width: 0, height: 16 },
+  rankBanner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopWidth: 2,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.four,
+    gap: Spacing.two,
+    shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.12,
-    shadowRadius: 24,
-    elevation: 5,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  rankBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  rankPill: {
+    minWidth: 52,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  rankPillText: {
+    color: '#FFF',
+  },
+  rankBannerText: {
+    flex: 1,
+    gap: Spacing.one,
+  },
+  progressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
   },
 });
