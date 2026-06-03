@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { AppIcon } from '@/components/ui/app-icon';
 
+import { AppIcon } from '@/components/ui/app-icon';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing, ThemeTokens } from '@/constants/theme';
+import { Layout, Radii, SpacingScale } from '@/constants/theme';
 
 type ActivityTab = 'overview' | 'activity' | 'submission';
 
@@ -40,7 +40,7 @@ export function ActivityLayout({
   return (
     <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
       <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: theme.background }]}>
-        <View style={[styles.header, { borderBottomColor: theme.border, backgroundColor: theme.background }]}>
+        <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <Pressable
             onPress={() => router.replace('/(tabs)/activities')}
             style={({ pressed }) => [
@@ -48,29 +48,31 @@ export function ActivityLayout({
               { backgroundColor: theme.backgroundSelected, opacity: pressed ? 0.75 : 1 },
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Go back"
+            accessibilityLabel="Go back to activities"
           >
             <AppIcon name="chevron.left" tintColor={theme.textPrimary} size={22} />
           </Pressable>
-          <ThemedText type="subtitle" style={[styles.headerTitle, { color: theme.textPrimary }]} numberOfLines={1}>
+          <ThemedText type="cardTitle" style={styles.headerTitle} numberOfLines={1}>
             {activityName}
           </ThemedText>
         </View>
 
-        <View style={[styles.tabContainer, { borderBottomColor: theme.border }]}>
+        <View style={[styles.tabContainer, { borderBottomColor: theme.border, backgroundColor: theme.background }]}>
           {(Object.keys(TAB_LABELS) as ActivityTab[]).map((tab) => {
             const selected = activeTab === tab;
             return (
               <Pressable
                 key={tab}
                 onPress={() => setActiveTab(tab)}
+                accessibilityRole="tab"
+                accessibilityState={{ selected }}
                 style={[
                   styles.tabButton,
-                  selected && { borderBottomColor: theme.accent },
+                  selected && { borderBottomColor: theme.accent, backgroundColor: theme.accentMuted },
                 ]}
               >
                 <ThemedText
-                  type="smallBold"
+                  type="captionBold"
                   style={{ color: selected ? theme.accent : theme.textSecondary }}
                 >
                   {TAB_LABELS[tab]}
@@ -99,39 +101,41 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.three,
-    gap: Spacing.three,
+    paddingHorizontal: Layout.screenPadding,
+    paddingBottom: SpacingScale.sm,
+    gap: SpacingScale.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: ThemeTokens.borderRadius,
+    width: Layout.touchTargetMin,
+    height: Layout.touchTargetMin,
+    borderRadius: Radii.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: '700',
   },
   tabContainer: {
     flexDirection: 'row',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: Spacing.two,
+    paddingHorizontal: SpacingScale.xs,
   },
   tabButton: {
     flex: 1,
-    paddingVertical: Spacing.three,
+    paddingVertical: SpacingScale.sm,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
+    borderTopLeftRadius: Radii.sm,
+    borderTopRightRadius: Radii.sm,
+    minHeight: Layout.buttonHeightSm,
+    justifyContent: 'center',
   },
   contentScrollView: { flex: 1 },
   contentContainer: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.six,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: SpacingScale.md,
+    paddingBottom: SpacingScale.huge,
   },
 });

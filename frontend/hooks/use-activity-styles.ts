@@ -1,6 +1,6 @@
 import { StyleSheet } from 'react-native';
 
-import { ThemeTokens, Spacing } from '@/constants/theme';
+import { Layout, Radii, SpacingScale, getShadowStyle } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export function useActivityStyles() {
@@ -9,33 +9,43 @@ export function useActivityStyles() {
   return StyleSheet.create({
     section: {
       width: '100%',
-      padding: Spacing.four,
-      borderRadius: ThemeTokens.cardRadius,
+      padding: Layout.cardPadding,
+      borderRadius: Radii.xl,
       borderWidth: 1,
       borderColor: theme.border,
       backgroundColor: theme.surface,
-      gap: Spacing.two,
-      marginBottom: Spacing.three,
+      gap: SpacingScale.sm,
+      marginBottom: SpacingScale.md,
+      ...getShadowStyle('sm', theme.shadow),
     },
     sectionTitle: {
-      marginTop: Spacing.two,
+      marginTop: SpacingScale.sm,
+    },
+    instructionImage: {
+      width: '100%',
+      height: 200,
+      marginVertical: SpacingScale.xs,
+      borderRadius: Radii.md,
     },
     input: {
+      minHeight: Layout.inputHeight,
       borderWidth: 1,
-      borderRadius: ThemeTokens.borderRadius,
+      borderRadius: Radii.md,
       borderColor: theme.border,
       backgroundColor: theme.backgroundSelected,
       color: theme.textPrimary,
-      padding: Spacing.three,
+      paddingHorizontal: SpacingScale.md,
+      paddingVertical: SpacingScale.sm,
+      fontSize: 16,
     },
     multiline: {
       minHeight: 96,
       textAlignVertical: 'top',
     },
     chip: {
-      paddingVertical: Spacing.two,
-      paddingHorizontal: Spacing.three,
-      borderRadius: 999,
+      paddingVertical: SpacingScale.xs,
+      paddingHorizontal: SpacingScale.md,
+      borderRadius: Radii.pill,
       borderWidth: 1,
       borderColor: theme.border,
     },

@@ -1,36 +1,31 @@
-import { useRouter, Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { loginUser } from '../../services/authService';
+import { AppButton } from '@/components/ui/app-button';
+import { AppCard } from '@/components/ui/app-card';
+import { AppInput } from '@/components/ui/app-input';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { loginUser } from '@/services/authService';
+import { Layout, SpacingScale } from '@/constants/theme';
+import { useUiStyles } from '@/hooks/use-ui-styles';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const ui = useUiStyles();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-     
-    console.log('[Login] Form submitted');
-    
     setLoading(true);
-     
-    console.log('[Login] Calling loginUser...');
     try {
       await loginUser({ email, password });
-       
-      console.log('[Login] Authentication successful');
-      
-      // Team account always owns a team profile and group.
       router.replace('/dashboard');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed.';
-       
-      console.error('[Login] Authentication error:', message);
       Alert.alert('Login error', message);
     } finally {
       setLoading(false);
@@ -38,65 +33,68 @@ export default function LoginScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        Login
-      </ThemedText>
-      <TextInput
-        autoCapitalize="none"
-        autoComplete="email"
-        keyboardType="email-address"
-        onChangeText={setEmail}
-        placeholder="Email"
-        placeholderTextColor="#999"
-        style={styles.input}
-        value={email}
-      />
-      <TextInput
-        autoCapitalize="none"
-        secureTextEntry
-        onChangeText={setPassword}
-        placeholder="Password"
-        placeholderTextColor="#999"
-        style={styles.input}
-        value={password}
-      />
-      <Pressable disabled={loading} onPress={handleLogin} style={styles.button}>
-        <ThemedText type="subtitle">{loading ? 'Signing in…' : 'Sign In'}</ThemedText>
-      </Pressable>
-      <Link href="/signup" style={styles.link}>
-        <ThemedText type="small">Create an account</ThemedText>
-      </Link>
+    <ThemedView style={ui.screen}>
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+            <View style={styles.header}>
+              <ThemedText type="pageTitle">Welcome back</ThemedText>
+              <ThemedText type="caption" themeColor="textSecondary">
+                Sign in to your team account
+              </ThemedText>
+            </View>
+
+            <AppCard>
+              <AppInput
+                label="Email"
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                onChangeText={setEmail}
+                placeholder="team@school.edu"
+                value={email}
+              />
+              <AppInput
+                label="Password"
+                autoCapitalize="none"
+                secureTextEntry
+                onChangeText={setPassword}
+                placeholder="Enter password"
+                value={password}
+              />
+              <AppButton label="Sign in" onPress={handleLogin} loading={loading} />
+            </AppCard>
+
+            <Link href="/signup" style={styles.link}>
+              <ThemedText type="link" themeColor="accent" style={styles.linkText}>
+                Create a team account
+              </ThemedText>
+            </Link>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: Spacing.four,
+  safeArea: { flex: 1 },
+  flex: { flex: 1 },
+  content: {
+    flexGrow: 1,
     justifyContent: 'center',
-    gap: Spacing.three,
+    paddingHorizontal: Layout.screenPadding,
+    paddingVertical: SpacingScale.xxl,
+    gap: Layout.sectionGap,
   },
-  title: {
-    textAlign: 'center',
-    marginBottom: Spacing.three,
-  },
-  input: {
-    width: '100%',
-    padding: Spacing.three,
-    borderRadius: Spacing.three,
-    backgroundColor: '#1F1F2A',
-    color: '#FFF',
-  },
-  button: {
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    alignItems: 'center',
-    backgroundColor: '#3E78FF',
+  header: {
+    gap: SpacingScale.xxs,
+    marginBottom: SpacingScale.sm,
   },
   link: {
-    marginTop: Spacing.two,
     alignItems: 'center',
+  },
+  linkText: {
+    textAlign: 'center',
   },
 });

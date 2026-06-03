@@ -3,168 +3,169 @@ import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMemo, useState } from 'react';
 
+import { CategoryBadge } from '@/components/ui/category-badge';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import {
+  ActivityCategoryName,
+  Layout,
+  Radii,
+  SpacingScale,
+  getCategoryBadgeColors,
+  getShadowStyle,
+} from '@/constants/theme';
 import { useThemeContext } from '@/components/ThemeContext';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing, ThemeMode } from '@/constants/theme';
+import { useUiStyles } from '@/hooks/use-ui-styles';
 
 const activities = [
-  { id: 'parachute-drop', label: 'Parachute Drop Challenge', href: '/activity/parachute-drop', category: 'Engineering', order: 1 },
-  { id: 'sound-pollution', label: 'Sound Pollution Hunter', href: '/activity/sound-pollution', category: 'Engineering', order: 2 },
-  { id: 'hand-fan', label: 'Hand Fan Challenge', href: '/activity/hand-fan', category: 'Engineering', order: 3 },
-  { id: 'earthquake-structure', label: 'Earthquake-Resistant Structure', href: '/activity/earthquake-structure', category: 'Engineering', order: 4 },
-  { id: 'human-performance', label: 'Human Performance Lab', href: '/activity/human-performance', category: 'Health & Medical', order: 5 },
-  { id: 'reaction-board', label: 'Reaction Board Challenge', href: '/activity/reaction-board', category: 'Health & Medical', order: 6 },
-  { id: 'breathing-trainer', label: 'Breathing Pace Trainer', href: '/activity/breathing-trainer', category: 'Health & Medical', order: 7 },
+  { id: 'parachute-drop', label: 'Parachute Drop Challenge', href: '/activity/parachute-drop', category: 'Engineering' as ActivityCategoryName, order: 1 },
+  { id: 'sound-pollution', label: 'Sound Pollution Hunter', href: '/activity/sound-pollution', category: 'Engineering' as ActivityCategoryName, order: 2 },
+  { id: 'hand-fan', label: 'Hand Fan Challenge', href: '/activity/hand-fan', category: 'Engineering' as ActivityCategoryName, order: 3 },
+  { id: 'earthquake-structure', label: 'Earthquake-Resistant Structure', href: '/activity/earthquake-structure', category: 'Engineering' as ActivityCategoryName, order: 4 },
+  { id: 'human-performance', label: 'Human Performance Lab', href: '/activity/human-performance', category: 'Health & Medical' as ActivityCategoryName, order: 5 },
+  { id: 'reaction-board', label: 'Reaction Board Challenge', href: '/activity/reaction-board', category: 'Health & Medical' as ActivityCategoryName, order: 6 },
+  { id: 'breathing-trainer', label: 'Breathing Pace Trainer', href: '/activity/breathing-trainer', category: 'Health & Medical' as ActivityCategoryName, order: 7 },
 ] as const;
 
 const categories = ['All', 'Engineering', 'Health & Medical'] as const;
-
-type ActivityCategory = (typeof categories)[number];
-type ActivityItemCategory = (typeof activities)[number]['category'];
-
-const categoryBadgeColors: Record<ActivityItemCategory, Record<ThemeMode, { background: string; border: string; text: string }>> = {
-  Engineering: {
-    light: { background: '#E8F0FF', border: '#C5D9FF', text: '#1E4DB7' },
-    dark: { background: '#1A2744', border: '#2F4775', text: '#9EC5FF' },
-  },
-  'Health & Medical': {
-    light: { background: '#E8F7F0', border: '#B8E6D4', text: '#0F6B52' },
-    dark: { background: '#1A2F28', border: '#2F5A4A', text: '#7EE3B8' },
-  },
-};
-
-function getCategoryBadgeStyle(category: ActivityItemCategory, mode: ThemeMode) {
-  return categoryBadgeColors[category][mode];
-}
+type FilterCategory = (typeof categories)[number];
 
 const sortedActivities = activities.slice().sort((a, b) => a.order - b.order);
 
 export default function ActivitiesScreen() {
   const theme = useTheme();
+  const ui = useUiStyles();
   const { mode } = useThemeContext();
-  const [activeCategory, setActiveCategory] = useState<ActivityCategory>('All');
+  const [activeCategory, setActiveCategory] = useState<FilterCategory>('All');
 
   const filteredActivities = useMemo(
     () =>
       activeCategory === 'All'
         ? sortedActivities
         : sortedActivities.filter((item) => item.category === activeCategory),
-    [activeCategory]
+    [activeCategory],
   );
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}>
+    <ThemedView style={ui.screen}>
       <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ThemedText type="title" style={[styles.title, { color: theme.textPrimary }]}>Activities</ThemedText>
+        <ThemedText type="pageTitle" style={styles.title}>
+          Activities
+        </ThemedText>
+        <ThemedText type="caption" themeColor="textSecondary" style={styles.subtitle}>
+          Complete hands-on STEMM challenges with your team
+        </ThemedText>
 
-      <View style={styles.filterRow}>
-        {categories.map((category) => {
-          const isSelected = category === activeCategory;
-          return (
-            <Pressable
-              key={category}
-              onPress={() => setActiveCategory(category)}
-              style={[
-                styles.filterButton,
-                {
-                  backgroundColor: isSelected ? theme.accent : theme.backgroundElement,
-                  borderColor: isSelected ? theme.accent : theme.border,
-                },
-              ]}
-            >
-              <ThemedText type="smallBold" style={{ color: isSelected ? theme.backgroundElement : theme.textPrimary }}>
-                {category}
-              </ThemedText>
-            </Pressable>
-          );
-        })}
-      </View>
+        <View style={styles.filterRow}>
+          {categories.map((category) => {
+            const isSelected = category === activeCategory;
+            const isThemedCategory = category !== 'All';
+            const badgeColors = isThemedCategory
+              ? getCategoryBadgeColors(category as ActivityCategoryName, mode)
+              : null;
 
-      <FlatList
-        data={filteredActivities}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const badge = getCategoryBadgeStyle(item.category, mode);
-          return (
+            return (
+              <Pressable
+                key={category}
+                onPress={() => setActiveCategory(category)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                style={[
+                  ui.chip,
+                  isSelected && !isThemedCategory && ui.chipActive,
+                  isSelected && isThemedCategory && badgeColors
+                    ? { backgroundColor: badgeColors.background, borderColor: badgeColors.border }
+                    : null,
+                ]}
+              >
+                <ThemedText
+                  type="captionBold"
+                  style={{
+                    color: isSelected
+                      ? isThemedCategory && badgeColors
+                        ? badgeColors.text
+                        : theme.onAccent
+                      : theme.textPrimary,
+                  }}
+                >
+                  {category}
+                </ThemedText>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        <FlatList
+          data={filteredActivities}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          renderItem={({ item }) => (
             <Link
               href={item.href}
               style={[
                 styles.activityCard,
                 {
-                  backgroundColor: theme.backgroundElement,
+                  backgroundColor: theme.surface,
                   borderColor: theme.border,
-                  shadowColor: theme.shadow,
+                  ...getShadowStyle('card', theme.shadow),
                 },
               ]}
             >
-              <ThemedText type="subtitle" style={{ color: theme.textPrimary }}>{item.label}</ThemedText>
-              <View
-                style={[
-                  styles.categoryBubble,
-                  { backgroundColor: badge.background, borderColor: badge.border },
-                ]}
-              >
-                <ThemedText type="smallBold" style={{ color: badge.text }}>
-                  {item.category}
+              <View style={styles.cardHeader}>
+                <ThemedText type="cardTitle" style={styles.activityLabel}>
+                  {item.label}
+                </ThemedText>
+                <ThemedText type="metadata" themeColor="textSecondary">
+                  #{item.order}
                 </ThemedText>
               </View>
+              <CategoryBadge category={item.category} />
             </Link>
-          );
-        }}
-        ItemSeparatorComponent={() => <View style={[styles.divider, { backgroundColor: theme.border }]} />}
-        contentContainerStyle={styles.listContent}
-      />
+          )}
+          ItemSeparatorComponent={() => <View style={{ height: SpacingScale.sm }} />}
+        />
       </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   safeArea: {
     flex: 1,
-    padding: Spacing.four,
-    gap: Spacing.three,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: SpacingScale.xl,
   },
   title: {
-    marginBottom: Spacing.four,
+    marginBottom: SpacingScale.xxs,
+  },
+  subtitle: {
+    marginBottom: SpacingScale.md,
   },
   filterRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginBottom: Spacing.three,
-  },
-  filterButton: {
-    borderRadius: Spacing.three,
-    paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.four,
-    borderWidth: 1,
+    gap: SpacingScale.xs,
+    marginBottom: SpacingScale.md,
   },
   listContent: {
-    gap: Spacing.two,
-    paddingBottom: Spacing.four,
+    paddingBottom: SpacingScale.huge,
   },
   activityCard: {
     width: '100%',
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
+    padding: Layout.cardPadding,
+    borderRadius: Radii.xl,
     borderWidth: 1,
-    gap: Spacing.two,
+    gap: SpacingScale.sm,
   },
-  categoryBubble: {
-    alignSelf: 'flex-start',
-    paddingVertical: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    borderRadius: 999,
-    borderWidth: 1,
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: SpacingScale.sm,
   },
-  divider: {
-    height: 1,
-    marginVertical: Spacing.two,
+  activityLabel: {
+    flex: 1,
   },
 });

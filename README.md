@@ -2,10 +2,10 @@
 
 Transform real-world physical activities into engaging, game-based Science, Technology, Engineering, Mathematics, and Medicine (STEMM) learning experiences for upper Primary and lower High School students.
 
-![Expo](https://img.shields.io/badge/Expo-56-black?style=flat-square&logo=expo)
-![React Native](https://img.shields.io/badge/React%20Native-0.85-blue?style=flat-square&logo=react)
-![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue?style=flat-square&logo=typescript)
-![Firebase](https://img.shields.io/badge/Firebase-Auth_%26_Firestore-orange?style=flat-square&logo=firebase)
+Expo
+React Native
+TypeScript
+Firebase
 
 ---
 
@@ -34,21 +34,23 @@ The app supports offline activity capture through a local SQLite queue and syncs
 
 ## Technology Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | Expo ~56 (managed workflow), React Native 0.85, React 19 |
-| Language | TypeScript ~6.0 |
-| Navigation | Expo Router ~56 (file-based routing) |
-| Authentication & Database | Firebase JS SDK 12 (Auth, Firestore) |
-| Offline storage | `expo-sqlite` (sync queue for activity results) |
-| Sensors & hardware | `expo-sensors`, `expo-camera`, `expo-av`, `expo-location` |
-| Background tasks | `expo-background-fetch`, `expo-task-manager` |
-| UI & animation | React Context (theme), Reanimated 4, Safe Area Context |
-| Icons | `expo-symbols` via cross-platform `AppIcon` wrapper |
-| Testing | Jest 29, `jest-expo` |
-| Linting | ESLint 9, `eslint-config-expo` |
-| Build | EAS Build (`eas.json`) |
-| Dev tooling | Firebase Admin SDK (standalone Firestore seed script) |
+
+| Layer                     | Technology                                                |
+| ------------------------- | --------------------------------------------------------- |
+| Framework                 | Expo ~56 (managed workflow), React Native 0.85, React 19  |
+| Language                  | TypeScript ~6.0                                           |
+| Navigation                | Expo Router ~56 (file-based routing)                      |
+| Authentication & Database | Firebase JS SDK 12 (Auth, Firestore)                      |
+| Offline storage           | `expo-sqlite` (sync queue for activity results)           |
+| Sensors & hardware        | `expo-sensors`, `expo-camera`, `expo-av`, `expo-location` |
+| Background tasks          | `expo-background-fetch`, `expo-task-manager`              |
+| UI & animation            | React Context (theme), Reanimated 4, Safe Area Context    |
+| Icons                     | `expo-symbols` via cross-platform `AppIcon` wrapper       |
+| Testing                   | Jest 29, `jest-expo`                                      |
+| Linting                   | ESLint 9, `eslint-config-expo`                            |
+| Build                     | EAS Build (`eas.json`)                                    |
+| Dev tooling               | Firebase Admin SDK (standalone Firestore seed script)     |
+
 
 The `/backend` folder contains shared service logic, models, and controllers used as a reference layer; the runnable Expo app lives in `/frontend`.
 
@@ -138,7 +140,6 @@ npm start
 
 Then press `a` for Android, `i` for iOS (macOS), `w` for web, or scan the QR code with Expo Go.
 
-
 ---
 
 ## Testing
@@ -191,15 +192,17 @@ ESLint uses the Expo flat config (`frontend/eslint.config.js`) with `eslint-conf
 
 Each activity uses a three-tab layout (Overview, Activity, Submission):
 
-| Activity | Category |
-|----------|----------|
-| Parachute Drop Challenge | Engineering |
-| Sound Pollution Hunter | Engineering |
-| Hand Fan Challenge | Engineering |
-| Earthquake-Resistant Structure | Engineering |
-| Human Performance Lab | Health & Medical |
-| Reaction Board Challenge | Health & Medical |
-| Breathing Pace Trainer | Health & Medical |
+
+| Activity                       | Category         |
+| ------------------------------ | ---------------- |
+| Parachute Drop Challenge       | Engineering      |
+| Sound Pollution Hunter         | Engineering      |
+| Hand Fan Challenge             | Engineering      |
+| Earthquake-Resistant Structure | Engineering      |
+| Human Performance Lab          | Health & Medical |
+| Reaction Board Challenge       | Health & Medical |
+| Breathing Pace Trainer         | Health & Medical |
+
 
 ### Leaderboard
 
@@ -230,15 +233,17 @@ Activity screens navigate back explicitly to the Activities list (not the Dashbo
 
 ### Firestore rules (`firestore.rules`)
 
-| Collection | Policy |
-|------------|--------|
-| `users/{userId}` | Users can read/write only their own profile; creation validates team name, members, and grade |
+
+| Collection         | Policy                                                                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `users/{userId}`   | Users can read/write only their own profile; creation validates team name, members, and grade                                      |
 | `groups/{groupId}` | Authenticated read (leaderboard); create requires creator as first member or `isSeedData` flag; update restricted to group members |
-| All other paths | Denied by default |
+| All other paths    | Denied by default                                                                                                                  |
+
 
 ### Client-side practices
 
-- Firebase config loaded from environment variables (`EXPO_PUBLIC_*`), not hardcoded secrets
+- Firebase config loaded from environment variables (`EXPO_PUBLIC_`*), not hardcoded secrets
 - Service account keys used only by the dev seed script and must never be committed (`.env` and key files are gitignored)
 - Auth persistence uses AsyncStorage via `initializeAuth` on native platforms
 - Grade-level validation enforced when joining groups
@@ -258,3 +263,4 @@ The app requests camera, microphone, and location permissions only for activitie
 - [Firestore Security Rules](https://firebase.google.com/docs/firestore/security/get-started)
 - [EAS Build](https://docs.expo.dev/build/introduction/)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/)
+

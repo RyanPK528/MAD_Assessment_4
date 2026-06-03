@@ -1,85 +1,54 @@
-import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
+import { Platform, Text, type TextProps, type TextStyle } from 'react-native';
 
-import { Fonts, ThemeColor } from '@/constants/theme';
+import { Fonts, ThemeColor, Typography, TypographyVariant, getTypographyStyle } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ThemedTextProps = TextProps & {
-  type?: 'default' | 'body' | 'button' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
+  type?: TypographyVariant | 'default' | 'title' | 'subtitle' | 'small' | 'smallBold' | 'link' | 'linkPrimary' | 'code';
   themeColor?: ThemeColor;
+};
+
+const legacyTypeMap: Record<string, TypographyVariant> = {
+  default: 'bodyMedium',
+  title: 'pageTitle',
+  subtitle: 'sectionTitle',
+  body: 'bodyMedium',
+  small: 'caption',
+  smallBold: 'captionBold',
+  button: 'button',
+  link: 'link',
+  linkPrimary: 'link',
+  code: 'code',
 };
 
 export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
   const theme = useTheme();
+  const resolvedType = legacyTypeMap[type] ?? (type as TypographyVariant);
+  const typographyStyle = getTypographyStyle(resolvedType);
+
+  const linkStyle: TextStyle | undefined =
+    type === 'link' || type === 'linkPrimary'
+      ? { color: type === 'linkPrimary' ? theme.accent : theme.textSecondary }
+      : undefined;
+
+  const codeStyle: TextStyle | undefined =
+    resolvedType === 'code'
+      ? {
+          fontFamily: Fonts?.mono,
+          fontWeight: Platform.select({ android: '700' as const, default: '500' as const }),
+        }
+      : undefined;
 
   return (
     <Text
       style={[
         { color: theme[themeColor ?? 'text'] },
-        type === 'default' && styles.default,
-        type === 'body' && styles.body,
-        type === 'button' && styles.button,
-        type === 'title' && styles.title,
-        type === 'small' && styles.small,
-        type === 'smallBold' && styles.smallBold,
-        type === 'subtitle' && styles.subtitle,
-        type === 'link' && styles.link,
-        type === 'linkPrimary' && styles.linkPrimary,
-        type === 'code' && styles.code,
+        typographyStyle,
+        linkStyle,
+        codeStyle,
         style,
       ]}
       {...rest}
     />
   );
 }
-
-const styles = StyleSheet.create({
-  small: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 500,
-  },
-  smallBold: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 700,
-  },
-  default: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: 500,
-  },
-  title: {
-    fontSize: 48,
-    fontWeight: 600,
-    lineHeight: 52,
-  },
-  subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
-    fontWeight: 600,
-  },
-  link: {
-    lineHeight: 30,
-    fontSize: 14,
-  },
-  linkPrimary: {
-    lineHeight: 30,
-    fontSize: 14,
-    color: '#3c87f7',
-  },
-  body: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: 500,
-  },
-  button: {
-    fontSize: 16,
-    lineHeight: 24,
-    fontWeight: '700',
-  },
-  code: {
-    fontFamily: Fonts.mono,
-    fontWeight: Platform.select({ android: 700 }) ?? 500,
-    fontSize: 12,
-  },
-});
