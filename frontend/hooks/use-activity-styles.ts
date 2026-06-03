@@ -9,6 +9,7 @@ export function useActivityStyles() {
   return StyleSheet.create({
     section: {
       width: '100%',
+      alignSelf: 'stretch',
       padding: Layout.cardPadding,
       borderRadius: Radii.xl,
       borderWidth: 1,
@@ -55,6 +56,10 @@ export function useActivityStyles() {
     },
     emptyText: {
       color: theme.textSecondary,
+    },
+    sectionRoot: {
+      width: '100%',
+      alignSelf: 'stretch',
     },
   });
 }

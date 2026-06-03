@@ -1,5 +1,16 @@
-import { TOTAL_CHALLENGES } from '@/constants/activities';
+import { TOTAL_CHALLENGES, ActivityId } from '@/constants/activities';
+import { getMaxAttempts } from '@/constants/activityAttemptConfig';
 import { getFirebaseAuth, getFirebaseFirestore, isFirebaseConfigured } from '@/config/firebaseNative';
+import {
+  getNextAttemptNumber,
+  normalizeActivityAttempts,
+  validateAttemptSubmission,
+} from '@/services/activityAttemptUtils';
+import {
+  ActivityAttemptRecord,
+  RawActivityResultEntry,
+  SaveActivityAttemptInput,
+} from '@/types/activityAttempt';
 import {
   addSyncRecord,
   ensureSyncQueueInitialized,
@@ -17,6 +28,10 @@ export interface ActivityResultPayload {
   completedAt: string;
   data: Record<string, unknown>;
   reflection?: string;
+  attemptId?: string;
+  attemptNumber?: number;
+  selfRating?: number;
+  submittedBy?: string;
 }
 
 export interface LeaderboardEntry {
@@ -27,35 +42,6 @@ export interface LeaderboardEntry {
   completedActivitiesCount: number;
   completionPercent: number;
   lastProgressUpdatedAt?: string;
-}
-
-export async function saveActivityResult(
-  activityId: string,
-  data: Record<string, unknown>,
-  options?: {
-    reflection?: string;
-    location?: { latitude: number; longitude: number } | null;
-    markComplete?: boolean;
-  },
-): Promise<void> {
-  await ensureSyncQueueInitialized();
-
-  const payload: ActivityResultPayload = {
-    activityId,
-    completedAt: new Date().toISOString(),
-    data,
-    reflection: options?.reflection,
-  };
-
-  await addSyncRecord(payload, null, options?.location ?? null);
-
-  if (options?.markComplete !== false) {
-    try {
-      await syncPendingResults();
-    } catch {
-      // Queued offline; background sync will retry when Firebase is available.
-    }
-  }
 }
 
 export async function syncPendingResults(): Promise<number> {
@@ -189,6 +175,129 @@ async function getGroupCompletedActivityIds(groupId: string): Promise<string[]> 
   } catch {
     return [];
   }
+}
+
+async function getCurrentUserGroupId(): Promise<string | null> {
+  const auth = getFirebaseAuth();
+  const db = getFirebaseFirestore();
+  if (!auth?.currentUser || !db) {
+    return null;
+  }
+
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    const userSnap = await getDoc(doc(db, USERS_COLLECTION, auth.currentUser.uid));
+    if (!userSnap.exists()) {
+      return null;
+    }
+    const groupId = userSnap.data().groupId;
+    return typeof groupId === 'string' ? groupId : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchGroupActivityResults(): Promise<RawActivityResultEntry[]> {
+  const groupId = await getCurrentUserGroupId();
+  const db = getFirebaseFirestore();
+  if (!groupId || !db) {
+    return [];
+  }
+
+  try {
+    const { doc, getDoc } = await import('firebase/firestore');
+    const groupSnap = await getDoc(doc(db, GROUPS_COLLECTION, groupId));
+    if (!groupSnap.exists()) {
+      return [];
+    }
+
+    const results = groupSnap.data().activityResults;
+    return Array.isArray(results) ? (results as RawActivityResultEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchActivityAttempts(activityId: ActivityId): Promise<ActivityAttemptRecord[]> {
+  const rawResults = await fetchGroupActivityResults();
+  return normalizeActivityAttempts(rawResults, activityId);
+}
+
+export async function getActivityAttempt(attemptId: string): Promise<ActivityAttemptRecord | null> {
+  const rawResults = await fetchGroupActivityResults();
+  for (const activityId of [
+    'parachute-drop',
+    'sound-pollution',
+    'hand-fan',
+    'earthquake-structure',
+    'human-performance',
+    'reaction-board',
+    'breathing-trainer',
+  ] as ActivityId[]) {
+    const attempts = normalizeActivityAttempts(rawResults, activityId);
+    const match = attempts.find((entry) => entry.attemptId === attemptId);
+    if (match) {
+      return match;
+    }
+  }
+  return null;
+}
+
+export async function saveActivityAttempt(input: SaveActivityAttemptInput): Promise<ActivityAttemptRecord> {
+  const validation = validateAttemptSubmission(input.selfRating, input.reflection);
+  if (!validation.ok) {
+    throw new Error(validation.message ?? 'Invalid attempt submission.');
+  }
+
+  const auth = getFirebaseAuth();
+  const uid = auth?.currentUser?.uid ?? '';
+
+  const existingAttempts = await fetchActivityAttempts(input.activityId);
+  const maxAttempts = getMaxAttempts(input.activityId);
+  if (maxAttempts !== undefined && existingAttempts.length >= maxAttempts) {
+    throw new Error(`Maximum of ${maxAttempts} attempts reached for this activity.`);
+  }
+
+  const attemptNumber = getNextAttemptNumber(existingAttempts);
+  const attemptId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  const completedAt = new Date().toISOString();
+  const record: ActivityAttemptRecord = {
+    attemptId,
+    activityId: input.activityId,
+    attemptNumber,
+    completedAt,
+    selfRating: input.selfRating,
+    reflection: input.reflection.trim(),
+    submittedBy: uid,
+    data: input.data,
+  };
+
+  await ensureSyncQueueInitialized();
+
+  const payload: ActivityResultPayload = {
+    activityId: input.activityId,
+    completedAt,
+    data: input.data,
+    reflection: input.reflection.trim(),
+    attemptId,
+    attemptNumber,
+    selfRating: input.selfRating,
+    submittedBy: uid,
+  };
+
+  await addSyncRecord(payload, null, input.location ?? null);
+
+  try {
+    await syncPendingResults();
+  } catch {
+    // Queued offline; background sync will retry when Firebase is available.
+  }
+
+  return record;
 }
 
 export async function fetchLeaderboardEntries(): Promise<LeaderboardEntry[]> {

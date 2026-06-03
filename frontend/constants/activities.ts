@@ -11,3 +11,5 @@ export const ACTIVITY_IDS = [
 ] as const;
 
 export type ActivityId = (typeof ACTIVITY_IDS)[number];
+
+export type ActivityCategoryName = 'Engineering' | 'Health & Medical';

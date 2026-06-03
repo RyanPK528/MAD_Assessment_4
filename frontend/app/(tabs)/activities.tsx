@@ -1,37 +1,23 @@
-import { Link } from 'expo-router';
+import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useMemo, useState } from 'react';
 
-import { CategoryBadge } from '@/components/ui/category-badge';
+import { ActivityCard } from '@/components/activity/ActivityCard';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ACTIVITY_LIST } from '@/constants/activityCatalog';
+import { ActivityCategoryName } from '@/constants/activities';
 import {
-  ActivityCategoryName,
   Layout,
-  Radii,
   SpacingScale,
   getCategoryBadgeColors,
-  getShadowStyle,
 } from '@/constants/theme';
 import { useThemeContext } from '@/components/ThemeContext';
 import { useTheme } from '@/hooks/use-theme';
 import { useUiStyles } from '@/hooks/use-ui-styles';
 
-const activities = [
-  { id: 'parachute-drop', label: 'Parachute Drop Challenge', href: '/activity/parachute-drop', category: 'Engineering' as ActivityCategoryName, order: 1 },
-  { id: 'sound-pollution', label: 'Sound Pollution Hunter', href: '/activity/sound-pollution', category: 'Engineering' as ActivityCategoryName, order: 2 },
-  { id: 'hand-fan', label: 'Hand Fan Challenge', href: '/activity/hand-fan', category: 'Engineering' as ActivityCategoryName, order: 3 },
-  { id: 'earthquake-structure', label: 'Earthquake-Resistant Structure', href: '/activity/earthquake-structure', category: 'Engineering' as ActivityCategoryName, order: 4 },
-  { id: 'human-performance', label: 'Human Performance Lab', href: '/activity/human-performance', category: 'Health & Medical' as ActivityCategoryName, order: 5 },
-  { id: 'reaction-board', label: 'Reaction Board Challenge', href: '/activity/reaction-board', category: 'Health & Medical' as ActivityCategoryName, order: 6 },
-  { id: 'breathing-trainer', label: 'Breathing Pace Trainer', href: '/activity/breathing-trainer', category: 'Health & Medical' as ActivityCategoryName, order: 7 },
-] as const;
-
 const categories = ['All', 'Engineering', 'Health & Medical'] as const;
 type FilterCategory = (typeof categories)[number];
-
-const sortedActivities = activities.slice().sort((a, b) => a.order - b.order);
 
 export default function ActivitiesScreen() {
   const theme = useTheme();
@@ -42,8 +28,8 @@ export default function ActivitiesScreen() {
   const filteredActivities = useMemo(
     () =>
       activeCategory === 'All'
-        ? sortedActivities
-        : sortedActivities.filter((item) => item.category === activeCategory),
+        ? ACTIVITY_LIST
+        : ACTIVITY_LIST.filter((item) => item.category === activeCategory),
     [activeCategory],
   );
 
@@ -99,32 +85,11 @@ export default function ActivitiesScreen() {
         <FlatList
           data={filteredActivities}
           keyExtractor={(item) => item.id}
+          style={styles.list}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => (
-            <Link
-              href={item.href}
-              style={[
-                styles.activityCard,
-                {
-                  backgroundColor: theme.surface,
-                  borderColor: theme.border,
-                  ...getShadowStyle('card', theme.shadow),
-                },
-              ]}
-            >
-              <View style={styles.cardHeader}>
-                <ThemedText type="cardTitle" style={styles.activityLabel}>
-                  {item.label}
-                </ThemedText>
-                <ThemedText type="metadata" themeColor="textSecondary">
-                  #{item.order}
-                </ThemedText>
-              </View>
-              <CategoryBadge category={item.category} />
-            </Link>
-          )}
-          ItemSeparatorComponent={() => <View style={{ height: SpacingScale.sm }} />}
+          renderItem={({ item }) => <ActivityCard activity={item} />}
+          ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
         />
       </SafeAreaView>
     </ThemedView>
@@ -149,23 +114,13 @@ const styles = StyleSheet.create({
     gap: SpacingScale.xs,
     marginBottom: SpacingScale.md,
   },
+  list: {
+    flex: 1,
+  },
   listContent: {
     paddingBottom: SpacingScale.huge,
   },
-  activityCard: {
-    width: '100%',
-    padding: Layout.cardPadding,
-    borderRadius: Radii.xl,
-    borderWidth: 1,
-    gap: SpacingScale.sm,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: SpacingScale.sm,
-  },
-  activityLabel: {
-    flex: 1,
+  cardSeparator: {
+    height: SpacingScale.xl,
   },
 });

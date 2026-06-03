@@ -1,21 +1,28 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Image, StyleSheet, TextInput, View } from 'react-native';
+import { Button, StyleSheet, TextInput, View } from 'react-native';
 
-import { ActivityLayout } from '@/components/activity/ActivityLayout';
+import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
+import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
+import { ActivitySection } from '@/components/activity/ActivitySection';
+import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissionPanel';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
+import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { useActivitySubmission } from '@/hooks/useActivitySubmission';
 import { useTheme } from '@/hooks/use-theme';
 import {
   createEarthquakeStructureController,
   EarthquakeState,
 } from '@/services/earthquakeStructureService';
-import { saveActivityResult } from '@/services/activityResultService';
-import { Spacing } from '@/constants/theme';
+import { SpacingScale } from '@/constants/theme';
 
 export default function EarthquakeStructureScreen() {
   const theme = useTheme();
+  const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<EarthquakeState>({
     isVibrating: false,
     elapsedSec: 0,
@@ -28,13 +35,22 @@ export default function EarthquakeStructureScreen() {
     message: 'Enter your structure design and start the earthquake test.',
   });
   const [draft, setDraft] = useState({ label: '', folds: '4', pillars: '4', prediction: '' });
-  const [reflection, setReflection] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [selfRating, setSelfRating] = useState('3');
-  const [comments, setComments] = useState('');
-  const [submittedAttempts, setSubmittedAttempts] = useState<number[]>([]);
 
   const controller = useMemo(() => createEarthquakeStructureController(setState), []);
+
+  const submission = useActivitySubmission({
+    activityId: 'earthquake-structure',
+    onSuccess: () => {
+      setState((current) => ({
+        ...current,
+        designs: [],
+        message: 'Attempt submitted. Start a new attempt from the Activity tab.',
+      }));
+      setDraft({ label: '', folds: '4', pillars: '4', prediction: '' });
+      setRefreshKey((key) => key + 1);
+      setActiveTab('submission');
+    },
+  });
 
   useEffect(() => {
     controller.setDraftLabel(draft.label);
@@ -47,44 +63,18 @@ export default function EarthquakeStructureScreen() {
 
   const best = controller.getBestDesign();
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      await saveActivityResult('earthquake-structure', {
-        designs: state.designs,
-        bestDesign: best,
-        reflection,
-      }, { reflection: `Self-rating: ${selfRating}/5 | ${comments}` });
-      setSubmittedAttempts((current) => [state.designs.length, ...current].slice(0, 5));
-      setState((s) => ({ ...s, message: 'Results saved and synced.' }));
-    } catch {
-      setState((s) => ({ ...s, message: 'Saved offline — will sync when connected.' }));
-    } finally {
-      setSubmitting(false);
-    }
+  const handleSubmit = () => {
+    submission.requestSubmit({
+      designs: state.designs,
+      bestDesign: best,
+    });
   };
 
-  const overviewContent = (
-    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <ThemedText type="subtitle">Description</ThemedText>
-      <ThemedText type="body">Test paper structures under simulated earthquake vibration and compare stability across designs.</ThemedText>
-      <ThemedText type="subtitle">Materials / Equipment</ThemedText>
-      <ThemedText type="body">Folded paper structure, flat surface, phone with motion sensors.</ThemedText>
-      <ThemedText type="subtitle">Instructions</ThemedText>
-      <ThemedText type="body">1. Enter folds and pillars for your design.</ThemedText>
-      <ThemedText type="body">2. Place phone at structure center and run vibration test.</ThemedText>
-      <ThemedText type="body">3. Save results for up to three designs and submit.</ThemedText>
-      <ThemedText type="subtitle">Diagram</ThemedText>
-      <Image
-        source={require('../../assets/instructions/activity4.png')}
-        style={styles.instructionImage}
-        resizeMode="contain"
-      />
-    </ThemedView>
-  );
+  const overviewContent = <ActivityOverviewPanel activityId="earthquake-structure" />;
 
   const activityContent = (
     <ThemedView style={styles.container}>
+      <ActivitySection title="Structure Design">
       <DesignTrialCard
         title={`Design ${state.designs.length + 1} of 3`}
         label={draft.label}
@@ -113,9 +103,9 @@ export default function EarthquakeStructureScreen() {
           </View>
         </View>
       </DesignTrialCard>
+      </ActivitySection>
 
-      <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <ThemedText type="subtitle">Live sensors</ThemedText>
+      <ActivitySection title="Vibration Test">
         <ThemedText type="body">Elapsed: {state.elapsedSec}s</ThemedText>
         <ThemedText type="body">Displacement: {state.currentDisplacementCm.toFixed(2)} cm (max {state.maxDisplacementCm.toFixed(2)})</ThemedText>
         <ThemedText type="body">Rotation: {state.currentRotationDeg.toFixed(2)}° (max {state.maxRotationDeg.toFixed(2)})</ThemedText>
@@ -129,11 +119,10 @@ export default function EarthquakeStructureScreen() {
           {state.isVibrating && <Button title="Stop early" onPress={() => controller.stopVibrationTest()} />}
         </View>
         <Button title="Save design results" onPress={() => controller.saveDesign()} disabled={state.isVibrating} />
-      </ThemedView>
+      </ActivitySection>
 
       {state.designs.length > 0 && (
-        <>
-          <ThemedText type="subtitle">Results comparison</ThemedText>
+        <ActivitySection title="Results Comparison">
           <TrialResultsTable
             rows={state.designs.map((d) => ({
               label: d.label,
@@ -146,63 +135,49 @@ export default function EarthquakeStructureScreen() {
               Best design: {best.label} (lowest movement)
             </ThemedText>
           )}
-        </>
+        </ActivitySection>
       )}
 
-      <Button title={submitting ? 'Saving…' : 'Submit results'} onPress={handleSubmit} disabled={submitting || state.designs.length === 0} />
+      <ActivitySection title="Submit">
+      <Button
+        title="Submit attempt"
+        onPress={handleSubmit}
+        disabled={!submission.canSubmit || state.designs.length === 0}
+      />
+      </ActivitySection>
     </ThemedView>
   );
 
   const submissionContent = (
-    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <ThemedText type="subtitle">Submitted attempts</ThemedText>
-      {submittedAttempts.length === 0 ? (
-        <ThemedText type="small">No submissions yet.</ThemedText>
-      ) : (
-        submittedAttempts.map((count, idx) => (
-          <ThemedText key={idx} type="small">Attempt {idx + 1}: {count} designs submitted</ThemedText>
-        ))
-      )}
-      <ThemedText type="subtitle">Theory behind activity</ThemedText>
-      <ThemedText type="body">Triangular folds and multiple pillars distribute seismic forces and reduce structural collapse risk.</ThemedText>
-      <ThemedText type="subtitle">Team reflection</ThemedText>
-      <TextInput
-        value={reflection}
-        onChangeText={setReflection}
-        multiline
-        placeholder="Which fold design moved the least?"
-        placeholderTextColor={theme.textSecondary}
-        style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]}
-      />
-      <ThemedText type="subtitle">Self-rating (1-5)</ThemedText>
-      <TextInput value={selfRating} onChangeText={setSelfRating} keyboardType="number-pad" style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]} />
-      <ThemedText type="subtitle">Comments</ThemedText>
-      <TextInput value={comments} onChangeText={setComments} multiline style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]} />
-    </ThemedView>
+    <ActivitySubmissionPanel activityId="earthquake-structure" refreshKey={refreshKey} />
   );
 
   return (
-    <ActivityLayout
-      activityName="Earthquake-Resistant Structure"
-      overviewContent={overviewContent}
-      activityContent={activityContent}
-      submissionContent={submissionContent}
-    />
+    <>
+      <ActivityLayout
+        activityName="Earthquake-Resistant Structure"
+        overviewContent={overviewContent}
+        activityContent={activityContent}
+        submissionContent={submissionContent}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      <ReflectionModal
+        visible={submission.modalVisible}
+        activityName={ACTIVITY_CATALOG['earthquake-structure'].label}
+        submitting={submission.submitting}
+        errorMessage={submission.submitError}
+        onConfirm={submission.confirmSubmit}
+        onCancel={submission.cancelSubmit}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: Spacing.three, paddingBottom: Spacing.six },
-  instructionImage: {
-    width: '100%',
-    height: 200,
-    marginVertical: Spacing.two,
-    borderRadius: Spacing.two,
-  },
-  card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },
-  row: { flexDirection: 'row', gap: Spacing.two },
-  halfField: { flex: 1, gap: Spacing.one },
-  input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
-  buttonRow: { gap: Spacing.two },
-  reflection: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, minHeight: 80, textAlignVertical: 'top' },
+  container: { gap: SpacingScale.xs },
+  row: { flexDirection: 'row', gap: SpacingScale.sm },
+  halfField: { flex: 1, gap: SpacingScale.xxs },
+  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
+  buttonRow: { gap: SpacingScale.sm },
 });

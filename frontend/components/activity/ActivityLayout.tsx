@@ -11,11 +11,15 @@ import { Layout, Radii, SpacingScale } from '@/constants/theme';
 
 type ActivityTab = 'overview' | 'activity' | 'submission';
 
+export type { ActivityTab };
+
 interface ActivityLayoutProps {
   activityName: string;
   overviewContent: React.ReactNode;
   activityContent: React.ReactNode;
   submissionContent: React.ReactNode;
+  activeTab?: ActivityTab;
+  onTabChange?: (tab: ActivityTab) => void;
 }
 
 const TAB_LABELS: Record<ActivityTab, string> = {
@@ -29,10 +33,21 @@ export function ActivityLayout({
   overviewContent,
   activityContent,
   submissionContent,
+  activeTab: controlledTab,
+  onTabChange,
 }: ActivityLayoutProps) {
   const router = useRouter();
   const theme = useTheme();
-  const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
+  const [internalTab, setInternalTab] = useState<ActivityTab>('overview');
+  const activeTab = controlledTab ?? internalTab;
+
+  const setActiveTab = (tab: ActivityTab) => {
+    if (onTabChange) {
+      onTabChange(tab);
+    } else {
+      setInternalTab(tab);
+    }
+  };
 
   const tabContent =
     activeTab === 'overview' ? overviewContent : activeTab === 'activity' ? activityContent : submissionContent;

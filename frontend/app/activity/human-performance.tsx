@@ -1,199 +1,250 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, StyleSheet, View, Image, TextInput } from 'react-native';
+import { Alert, StyleSheet, TextInput, View } from 'react-native';
 
-import { createMotionLabController, MotionLabState, SensorReading } from '@/services/motionLabService';
+import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
+import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
+import { ActivitySection } from '@/components/activity/ActivitySection';
+import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissionPanel';
+import { HumanPerformanceResultsTable } from '@/components/activity/HumanPerformanceResultsTable';
+import { MovementSparkline } from '@/components/activity/MovementSparkline';
+import { RecordCircleButton } from '@/components/activity/RecordCircleButton';
+import { RecordingCountdownOverlay } from '@/components/activity/RecordingCountdownOverlay';
+import { ReflectionModal } from '@/components/activity/ReflectionModal';
+import { AppButton } from '@/components/ui/app-button';
+import { StatCard } from '@/components/ui/stat-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
-import { ActivityLayout } from '@/components/activity/ActivityLayout';
-import { saveActivityResult } from '@/services/activityResultService';
+import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { SpacingScale } from '@/constants/theme';
+import { useActivitySubmission } from '@/hooks/useActivitySubmission';
+import {
+  MOVEMENT_PHASES,
+  MAX_STRETCH_ATTEMPTS,
+  StretchAttemptResult,
+  StretchLabState,
+  buildAttemptResult,
+  buildSubmissionPayload,
+  createInitialStretchLabState,
+  createStretchLabController,
+  deltaToMillimeters,
+  formatRecordingTime,
+  validateFinalSubmission,
+} from '@/services/humanPerformanceService';
 import { useActivityStyles } from '@/hooks/use-activity-styles';
-
-interface HumanPerformanceLabResult {
-  finalSmoothnessScore: number;
-  finalBreachCount: number;
-  elapsedRecordingTime: number;
-  recordedSensorData: SensorReading[];
-}
+import { useTheme } from '@/hooks/use-theme';
 
 export default function HumanPerformanceScreen() {
-  const [motionState, setMotionState] = useState<MotionLabState>({
-    acceleration: { x: 0, y: 0, z: 0 },
-    rotation: { x: 0, y: 0, z: 0 },
-    smoothnessScore: 100,
-    breachCount: 0,
-    isBreachActive: false,
-    lastUpdateAt: 0,
-    isRecording: false,
-    recordedSensorData: [],
-    elapsedRecordingTime: 0,
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState('Ready to start recording.');
-  const [selfRating, setSelfRating] = useState('3');
-  const [comments, setComments] = useState('');
-  const [submittedAttempts, setSubmittedAttempts] = useState<HumanPerformanceLabResult[]>([]);
+  const theme = useTheme();
   const activityStyles = useActivityStyles();
 
-  const controller = useMemo(() => createMotionLabController(setMotionState), []);
+  const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [labState, setLabState] = useState<StretchLabState>(createInitialStretchLabState());
+  const [predictionInput, setPredictionInput] = useState('');
+  const [attempts, setAttempts] = useState<StretchAttemptResult[]>([]);
 
-  useEffect(() => {
-    controller.start(); // Start sensor listeners in idle mode
-    return () => controller.stop();
-  }, [controller]);
+  const controller = useMemo(() => createStretchLabController(setLabState), []);
 
-  const handleStartStopRecording = () => {
-    if (motionState.isRecording) {
-      controller.stopRecording();
-      setMessage('Recording stopped. Review data or submit.');
-    } else {
-      controller.startRecording();
-      setMessage('Recording in progress...');
+  const submission = useActivitySubmission({
+    activityId: 'human-performance',
+    onSuccess: () => {
+      setAttempts([]);
+      setPredictionInput('');
+      controller.preparePhase(0);
+      setRefreshKey((key) => key + 1);
+      setActiveTab('submission');
+    },
+  });
+
+  useEffect(() => () => controller.dispose(), [controller]);
+
+  const currentPhase = MOVEMENT_PHASES[labState.phaseIndex];
+  const isLastPhase = labState.phaseIndex >= MOVEMENT_PHASES.length - 1;
+  const allPhasesComplete = attempts.length >= MAX_STRETCH_ATTEMPTS;
+
+  const handleStartAttempt = () => {
+    if (!predictionInput.trim()) {
+      Alert.alert('Prediction required', 'Enter your predicted phone vibration (absolute) before recording.');
+      return;
     }
+    controller.startCountdown();
   };
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      const result: HumanPerformanceLabResult = {
-        finalSmoothnessScore: motionState.smoothnessScore,
-        finalBreachCount: motionState.breachCount,
-        elapsedRecordingTime: motionState.elapsedRecordingTime,
-        recordedSensorData: motionState.recordedSensorData,
-      };
-      await saveActivityResult('human-performance-lab', result);
-      setMessage('Results saved successfully!');
-      setSubmittedAttempts((current) => [result, ...current].slice(0, 5));
-      controller.resetState(); // Reset state for a new attempt
-    } catch (error) {
-      console.error('Failed to save activity result:', error);
-      setMessage('Failed to save results. Saved offline.');
-    } finally {
-      setSubmitting(false);
-    }
+  const handleFinishRecording = () => {
+    controller.finishRecording();
   };
 
-  const overviewContent = (
-    <ThemedView style={activityStyles.section}>
-      <ThemedText type="subtitle">Description</ThemedText>
-      <ThemedText type="body">
-        Activity 5: Human Performance Lab – Stretch Speed & Gracefulness. Students investigate how the human body moves by measuring speed, smoothness, and coordination during controlled stretching activities.
-      </ThemedText>
+  const handleResetPhase = () => {
+    controller.resetPhaseToIdle();
+  };
 
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Materials/Equipment</ThemedText>
-      <ThemedText type="body">• Mobile phone with STEMM Lab app</ThemedText>
-      <ThemedText type="body">• Open space to move safely</ThemedText>
+  const handleContinue = () => {
+    const result = buildAttemptResult(
+      labState.phaseIndex,
+      predictionInput.trim(),
+      labState.elapsedSec,
+      labState.largestDelta,
+      labState.vibrationEvents,
+      labState.smoothnessScore,
+    );
 
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Step-by-Step Instructions</ThemedText>
-      <ThemedText type="body">1. Hold the phone firmly in one hand. Activate the App vibration sensor.</ThemedText>
-      <ThemedText type="body">2. Perform guided movement slowly as shown below. Record the vibration.</ThemedText>
-      <ThemedText type="body">3. Repeat the activity with vibration feedback enabled.</ThemedText>
-      <ThemedText type="body">4. Review speed, smoothness, and range-of-motion data.</ThemedText>
-      <ThemedText type="body">5. Upload results and reflect as a group.</ThemedText>
-      <ThemedText type="subtitle">Diagram</ThemedText>
-      <Image
-        source={require('../../assets/instructions/activity5.png')}
-        style={styles.instructionImage}
-        resizeMode="contain"
-      />
-    </ThemedView>
-  );
+    setAttempts((current) => {
+      const updated = [...current];
+      updated[labState.phaseIndex] = result;
+      return updated;
+    });
+
+    setPredictionInput('');
+
+    if (isLastPhase) {
+      controller.resetPhaseToIdle();
+      return;
+    }
+
+    controller.advancePhase();
+  };
+
+  const handleSubmitAttempt = () => {
+    const validation = validateFinalSubmission(attempts);
+    if (!validation.ok) {
+      Alert.alert('Incomplete attempt', validation.message ?? 'Complete all phases first.');
+      return;
+    }
+    submission.requestSubmit(buildSubmissionPayload(attempts));
+  };
+
+  const overviewContent = <ActivityOverviewPanel activityId="human-performance" />;
 
   const activityContent = (
-    <ThemedView style={activityStyles.section}>
-      <ThemedText type="subtitle">Live Sensor Data</ThemedText>
-      <ThemedText type="body">Score: {motionState.smoothnessScore.toFixed(0)} / 100</ThemedText>
-      <ThemedText type="body">Breaches: {motionState.breachCount}</ThemedText>
-      <ThemedText type="small">
-        Accelerometer: x {motionState.acceleration.x.toFixed(2)} y {motionState.acceleration.y.toFixed(2)} z {motionState.acceleration.z.toFixed(2)}
-      </ThemedText>
-      <ThemedText type="small">
-        Gyroscope: x {motionState.rotation.x.toFixed(2)} y {motionState.rotation.y.toFixed(2)} z {motionState.rotation.z.toFixed(2)}
-      </ThemedText>
-      <ThemedText type="body" style={styles.timerText}>
-        Elapsed Recording Time: {motionState.elapsedRecordingTime.toFixed(1)}s
-      </ThemedText>
-      <ThemedText type="small" style={{ marginTop: Spacing.two }}>{message}</ThemedText>
+    <ThemedView style={styles.container}>
+      <ActivitySection title={`Phase ${currentPhase.attemptNumber} — ${currentPhase.label}`}>
+        <ThemedText type="body">{currentPhase.instruction}</ThemedText>
+        <View style={styles.timerRow}>
+          <ThemedText type="small" themeColor="textSecondary">
+            {labState.recordingState === 'recording' || labState.recordingState === 'completed'
+              ? 'Time elapsed'
+              : 'Timer'}
+          </ThemedText>
+          <ThemedText type="title">{formatRecordingTime(labState.elapsedSec)}</ThemedText>
+        </View>
+      </ActivitySection>
 
-      <View style={styles.buttonRow}>
-        <Button
-          title={motionState.isRecording ? 'Stop Recording' : 'Start Recording'}
-          onPress={handleStartStopRecording}
-        />
-        <Button
-          title={submitting ? 'Submitting...' : 'Submit Results'}
-          onPress={handleSubmit}
-          disabled={submitting || motionState.isRecording || motionState.recordedSensorData.length === 0}
-        />
-      </View>
+      {labState.recordingState === 'idle' && !allPhasesComplete ? (
+        <ActivitySection title="Prediction">
+          <ThemedText type="small" themeColor="textSecondary">
+            Predict phone vibration sensor reading (absolute), e.g. +/- 5 mm.
+          </ThemedText>
+          <TextInput
+            value={predictionInput}
+            onChangeText={setPredictionInput}
+            placeholder="e.g. 5 mm"
+            placeholderTextColor={theme.textSecondary}
+            style={activityStyles.input}
+          />
+          <RecordCircleButton onPress={handleStartAttempt} />
+        </ActivitySection>
+      ) : null}
+
+      {labState.recordingState === 'recording' ? (
+        <RecordCircleButton label="Finish" onPress={handleFinishRecording} />
+      ) : null}
+
+      {labState.recordingState === 'recording' || labState.recordingState === 'completed' ? (
+        <>
+          <ActivitySection title="Live Metrics">
+            <View style={styles.statsRow}>
+              <StatCard label="Vibrations detected" value={String(labState.vibrationEvents)} />
+              <StatCard label="Smoothness score" value={`${Math.round(labState.smoothnessScore)}%`} />
+            </View>
+            <ThemedText type="small" themeColor="textSecondary">
+              Largest movement: {deltaToMillimeters(labState.largestDelta)} mm
+            </ThemedText>
+          </ActivitySection>
+
+          <ActivitySection title="Movement Monitor">
+            <MovementSparkline values={labState.graphSamples} />
+          </ActivitySection>
+        </>
+      ) : null}
+
+      {labState.recordingState === 'completed' ? (
+        <ActivitySection title="Phase complete">
+          <ThemedText type="body">
+            Outcome: {deltaToMillimeters(labState.largestDelta)} mm in {labState.elapsedSec} s
+          </ThemedText>
+          <AppButton
+            label="Reset phase"
+            onPress={handleResetPhase}
+            variant="outline"
+            style={{ marginTop: SpacingScale.sm }}
+          />
+          <AppButton
+            label={isLastPhase ? 'Save phases' : 'Continue to next phase'}
+            onPress={handleContinue}
+            style={{ marginTop: SpacingScale.sm }}
+          />
+        </ActivitySection>
+      ) : null}
+
+      {attempts.length > 0 ? (
+        <ActivitySection title="Current attempt">
+          <HumanPerformanceResultsTable attempts={attempts} />
+        </ActivitySection>
+      ) : null}
+
+      {allPhasesComplete ? (
+        <ActivitySection title="Submit">
+          <AppButton
+            label="Submit attempt"
+            onPress={handleSubmitAttempt}
+            disabled={!submission.canSubmit}
+          />
+        </ActivitySection>
+      ) : null}
     </ThemedView>
   );
 
   const submissionContent = (
-    <ThemedView style={activityStyles.section}>
-      <ThemedText type="subtitle">Submitted attempts</ThemedText>
-      {submittedAttempts.length === 0 ? (
-        <ThemedText type="small">No submissions yet. Complete an attempt and submit from the Activity tab.</ThemedText>
-      ) : (
-        submittedAttempts.map((attempt, idx) => (
-          <ThemedText key={idx} type="small">
-            Attempt {idx + 1}: score {attempt.finalSmoothnessScore.toFixed(0)}, breaches {attempt.finalBreachCount}, time {attempt.elapsedRecordingTime.toFixed(1)}s
-          </ThemedText>
-        ))
-      )}
-
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Theory behind activity</ThemedText>
-      <ThemedText type="body">
-        Smooth and controlled movement indicates better neuromuscular coordination. Accelerometer and gyroscope spikes indicate jerky movement and control loss.
-      </ThemedText>
-
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Self-rating (1-5)</ThemedText>
-      <TextInput value={selfRating} onChangeText={setSelfRating} keyboardType="number-pad" style={activityStyles.input} />
-      <ThemedText type="subtitle" style={styles.sectionTitle}>Comments</ThemedText>
-      <TextInput value={comments} onChangeText={setComments} multiline style={[activityStyles.input, activityStyles.multiline]} />
-    </ThemedView>
+    <ActivitySubmissionPanel activityId="human-performance" refreshKey={refreshKey} />
   );
 
   return (
-    <ActivityLayout
-      activityName="Human Performance Lab"
-      overviewContent={overviewContent}
-      activityContent={activityContent}
-      submissionContent={submissionContent}
-    />
+    <>
+      <ActivityLayout
+        activityName="Human Performance Lab"
+        overviewContent={overviewContent}
+        activityContent={activityContent}
+        submissionContent={submissionContent}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+
+      <RecordingCountdownOverlay
+        visible={labState.recordingState === 'countdown'}
+        countdown={labState.countdown}
+      />
+
+      <ReflectionModal
+        visible={submission.modalVisible}
+        activityName={ACTIVITY_CATALOG['human-performance'].label}
+        submitting={submission.submitting}
+        errorMessage={submission.submitError}
+        onConfirm={submission.confirmSubmit}
+        onCancel={submission.cancelSubmit}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { gap: SpacingScale.xs },
+  timerRow: {
+    marginTop: SpacingScale.sm,
+    gap: SpacingScale.xxs,
   },
-  title: {
-    marginBottom: Spacing.three,
-  },
-  contentCard: {
-    width: '100%',
-    gap: Spacing.two,
-    marginBottom: Spacing.four,
-  },
-  sectionTitle: {
-    marginTop: Spacing.three,
-  },
-  instructionImage: {
-    width: '100%',
-    height: 200,
-    marginVertical: Spacing.two,
-    borderRadius: Spacing.two,
-  },
-  timerText: {
-    marginTop: Spacing.two,
-    fontWeight: 'bold',
-  },
-  buttonRow: {
+  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: Spacing.four,
-    width: '100%',
-    gap: Spacing.two,
+    gap: SpacingScale.sm,
+    flexWrap: 'wrap',
   },
 });

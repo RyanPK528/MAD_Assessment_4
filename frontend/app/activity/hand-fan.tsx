@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Image, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Button, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
-import { ActivityLayout } from '@/components/activity/ActivityLayout';
+import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
+import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
+import { ActivitySection } from '@/components/activity/ActivitySection';
+import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissionPanel';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
+import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { useActivitySubmission } from '@/hooks/useActivitySubmission';
 import { useTheme } from '@/hooks/use-theme';
 import {
   createHandFanController,
@@ -13,13 +19,14 @@ import {
   FanMaterial,
   HandFanState,
 } from '@/services/handFanService';
-import { saveActivityResult } from '@/services/activityResultService';
-import { Spacing } from '@/constants/theme';
+import { SpacingScale } from '@/constants/theme';
 
 const DISTANCES: FanDistanceCm[] = [15, 30, 45];
 
 export default function HandFanScreen() {
   const theme = useTheme();
+  const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<HandFanState>({
     phase: 'idle',
     fanIntensity: 0,
@@ -33,12 +40,23 @@ export default function HandFanScreen() {
   });
   const [draft, setDraft] = useState({ label: '', prediction: '', notes: '' });
   const [bendInput, setBendInput] = useState('30');
-  const [submitting, setSubmitting] = useState(false);
-  const [selfRating, setSelfRating] = useState('3');
-  const [comments, setComments] = useState('');
-  const [submittedAttempts, setSubmittedAttempts] = useState<number[]>([]);
 
   const controller = useMemo(() => createHandFanController(setState), []);
+
+  const submission = useActivitySubmission({
+    activityId: 'hand-fan',
+    onSuccess: () => {
+      setState((current) => ({
+        ...current,
+        designs: [],
+        message: 'Attempt submitted. Start a new attempt from the Activity tab.',
+      }));
+      setDraft({ label: '', prediction: '', notes: '' });
+      setBendInput('30');
+      setRefreshKey((key) => key + 1);
+      setActiveTab('submission');
+    },
+  });
 
   useEffect(() => {
     controller.setDraftLabel(draft.label);
@@ -48,43 +66,15 @@ export default function HandFanScreen() {
 
   useEffect(() => () => controller.stop(), [controller]);
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      await saveActivityResult('hand-fan', { designs: state.designs, reflection: draft.notes }, {
-        reflection: `Self-rating: ${selfRating}/5 | ${comments}`,
-      });
-      setSubmittedAttempts((current) => [state.designs.length, ...current].slice(0, 5));
-      setState((s) => ({ ...s, message: 'Results saved.' }));
-    } catch {
-      setState((s) => ({ ...s, message: 'Saved offline.' }));
-    } finally {
-      setSubmitting(false);
-    }
+  const handleSubmit = () => {
+    submission.requestSubmit({ designs: state.designs });
   };
 
-  const overviewContent = (
-    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <ThemedText type="subtitle">Description</ThemedText>
-      <ThemedText type="body">Fan paper or cardboard from different distances and measure bend angle and fan intensity.</ThemedText>
-      <ThemedText type="subtitle">Materials / Equipment</ThemedText>
-      <ThemedText type="body">Paper/cardboard sheet, phone with accelerometer.</ThemedText>
-      <ThemedText type="subtitle">Instructions</ThemedText>
-      <ThemedText type="body">1. Choose material and fan distance.</ThemedText>
-      <ThemedText type="body">2. Start fanning and record intensity.</ThemedText>
-      <ThemedText type="body">3. Save up to three designs and submit.</ThemedText>
-      <ThemedText type="subtitle">Diagram</ThemedText>
-      <Image
-        source={require('../../assets/instructions/activity3.png')}
-        style={styles.instructionImage}
-        resizeMode="contain"
-      />
-    </ThemedView>
-  );
+  const overviewContent = <ActivityOverviewPanel activityId="hand-fan" />;
 
   const activityContent = (
     <ThemedView style={styles.container}>
-      <ThemedText type="subtitle">Material</ThemedText>
+      <ActivitySection title="Material">
       <View style={styles.segmentRow}>
         {(['paper', 'cardboard'] as FanMaterial[]).map((m) => (
           <Pressable
@@ -96,8 +86,9 @@ export default function HandFanScreen() {
           </Pressable>
         ))}
       </View>
+      </ActivitySection>
 
-      <ThemedText type="subtitle">Fan distance (cm)</ThemedText>
+      <ActivitySection title="Fan Distance">
       <View style={styles.segmentRow}>
         {DISTANCES.map((d) => (
           <Pressable
@@ -109,9 +100,9 @@ export default function HandFanScreen() {
           </Pressable>
         ))}
       </View>
+      </ActivitySection>
 
-      <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-        <ThemedText type="subtitle">Fan intensity</ThemedText>
+      <ActivitySection title="Fan Intensity">
         <ThemedText type="title">{state.phase === 'fanning' ? state.liveIntensity.toFixed(1) : state.fanIntensity.toFixed(1)}</ThemedText>
         <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
         <View style={styles.buttonRow}>
@@ -121,8 +112,9 @@ export default function HandFanScreen() {
             <Button title="Stop & record" onPress={() => controller.stopFanTracking()} />
           )}
         </View>
-      </ThemedView>
+      </ActivitySection>
 
+      <ActivitySection title="Design Trial">
       <DesignTrialCard
         title={`Design ${state.designs.length + 1} of 3`}
         label={draft.label}
@@ -148,8 +140,10 @@ export default function HandFanScreen() {
         </ThemedText>
       </DesignTrialCard>
       <Button title="Save design" onPress={() => controller.saveDesign()} disabled={state.phase === 'fanning'} />
+      </ActivitySection>
 
       {state.designs.length > 0 && (
+        <ActivitySection title="Results">
         <TrialResultsTable
           rows={state.designs.map((d) => ({
             label: d.label,
@@ -157,53 +151,47 @@ export default function HandFanScreen() {
             outcome: `${d.bendAngleDeg}° bend, ${d.estimatedForceN} N @ ${d.distanceCm}cm`,
           }))}
         />
+        </ActivitySection>
       )}
 
-      <Button title={submitting ? 'Saving…' : 'Submit results'} onPress={handleSubmit} disabled={submitting || state.designs.length === 0} />
+      <ActivitySection title="Submit">
+      <Button
+        title="Submit attempt"
+        onPress={handleSubmit}
+        disabled={!submission.canSubmit || state.designs.length === 0}
+      />
+      </ActivitySection>
     </ThemedView>
   );
 
-  const submissionContent = (
-    <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-      <ThemedText type="subtitle">Submitted attempts</ThemedText>
-      {submittedAttempts.length === 0 ? (
-        <ThemedText type="small">No submissions yet.</ThemedText>
-      ) : (
-        submittedAttempts.map((count, idx) => (
-          <ThemedText key={idx} type="small">Attempt {idx + 1}: {count} designs saved</ThemedText>
-        ))
-      )}
-      <ThemedText type="subtitle">Theory behind activity</ThemedText>
-      <ThemedText type="body">Airflow applies force proportional to fan intensity; material stiffness resists bending (F ≈ kθ).</ThemedText>
-      <ThemedText type="subtitle">Self-rating (1-5)</ThemedText>
-      <TextInput value={selfRating} onChangeText={setSelfRating} keyboardType="number-pad" style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]} />
-      <ThemedText type="subtitle">Comments</ThemedText>
-      <TextInput value={comments} onChangeText={setComments} multiline style={[styles.input, styles.multiline, { color: theme.textPrimary, borderColor: theme.border }]} />
-    </ThemedView>
-  );
+  const submissionContent = <ActivitySubmissionPanel activityId="hand-fan" refreshKey={refreshKey} />;
 
   return (
-    <ActivityLayout
-      activityName="Hand Fan Challenge"
-      overviewContent={overviewContent}
-      activityContent={activityContent}
-      submissionContent={submissionContent}
-    />
+    <>
+      <ActivityLayout
+        activityName="Hand Fan Challenge"
+        overviewContent={overviewContent}
+        activityContent={activityContent}
+        submissionContent={submissionContent}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      <ReflectionModal
+        visible={submission.modalVisible}
+        activityName={ACTIVITY_CATALOG['hand-fan'].label}
+        submitting={submission.submitting}
+        errorMessage={submission.submitError}
+        onConfirm={submission.confirmSubmit}
+        onCancel={submission.cancelSubmit}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { gap: Spacing.three, paddingBottom: Spacing.six },
-  instructionImage: {
-    width: '100%',
-    height: 200,
-    marginVertical: Spacing.two,
-    borderRadius: Spacing.two,
-  },
-  segmentRow: { flexDirection: 'row', gap: Spacing.two, flexWrap: 'wrap' },
-  segment: { paddingVertical: Spacing.two, paddingHorizontal: Spacing.three, borderRadius: Spacing.two, borderWidth: 1 },
-  card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },
-  buttonRow: { marginTop: Spacing.two },
-  input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
-  multiline: { minHeight: 80, textAlignVertical: 'top' },
+  container: { gap: SpacingScale.xs },
+  segmentRow: { flexDirection: 'row', gap: SpacingScale.sm, flexWrap: 'wrap' },
+  segment: { paddingVertical: SpacingScale.sm, paddingHorizontal: SpacingScale.md, borderRadius: SpacingScale.sm, borderWidth: 1 },
+  buttonRow: { marginTop: SpacingScale.sm },
+  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
 });
