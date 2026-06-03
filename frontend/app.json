@@ -1,5 +1,10 @@
 {
   "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d4677c44-0837-4863-9108-c46c2c5133b9"
+      }
+    },
     "name": "frontend",
     "slug": "frontend",
     "version": "1.0.0",
@@ -52,5 +57,6 @@
       "typedRoutes": true,
       "reactCompiler": true
     }
+    
   }
 }

@@ -13,6 +13,10 @@ module.exports = {
       EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET ?? '',
       EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
       EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '',
+      eas: {
+        "projectId": "d4677c44-0837-4863-9108-c46c2c5133b9"
+      }
+      
     },
     ios: {
       ...appJson.expo.ios,
