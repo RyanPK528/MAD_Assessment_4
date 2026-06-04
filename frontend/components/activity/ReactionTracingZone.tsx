@@ -29,11 +29,13 @@ export function ReactionTracingZone({ active, onComplete }: ReactionTracingZoneP
   const [timeRemainingSec, setTimeRemainingSec] = useState(TRACING_DURATION_SEC);
   const [circlePosition, setCirclePosition] = useState({ x: 0, y: 0 });
   const [accuracyPercent, setAccuracyPercent] = useState<number | null>(null);
+  const [liveAccuracyPercent, setLiveAccuracyPercent] = useState<number | null>(null);
 
   const containerSizeRef = useRef({ width: 0, height: 0 });
   const fingerPosition = useRef({ x: 0, y: 0 });
   const isTouching = useRef(false);
   const trackingSamples = useRef<TracingSample[]>([]);
+  const lastLiveAccuracyUpdateRef = useRef(0);
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const movementIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tracingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -90,7 +92,9 @@ export function ReactionTracingZone({ active, onComplete }: ReactionTracingZoneP
     setPhase('tracing');
     setStartCountdown(null);
     setTimeRemainingSec(TRACING_DURATION_SEC);
+    setLiveAccuracyPercent(null);
     trackingSamples.current = [];
+    lastLiveAccuracyUpdateRef.current = 0;
 
     let x = width / 2;
     let y = height / 2;
@@ -124,6 +128,12 @@ export function ReactionTracingZone({ active, onComplete }: ReactionTracingZoneP
         circleY: y,
         touching: isTouching.current,
       });
+
+      const now = Date.now();
+      if (now - lastLiveAccuracyUpdateRef.current >= 250) {
+        lastLiveAccuracyUpdateRef.current = now;
+        setLiveAccuracyPercent(calculateTracingAccuracy(trackingSamples.current));
+      }
     }, 16);
 
     tracingIntervalRef.current = setInterval(() => {
@@ -144,6 +154,7 @@ export function ReactionTracingZone({ active, onComplete }: ReactionTracingZoneP
     clearAllIntervals();
     trackingSamples.current = [];
     setAccuracyPercent(null);
+    setLiveAccuracyPercent(null);
     setPhase('countdown');
     setStartCountdown(TRACING_START_COUNTDOWN_SEC);
     setTimeRemainingSec(TRACING_DURATION_SEC);
@@ -178,6 +189,7 @@ export function ReactionTracingZone({ active, onComplete }: ReactionTracingZoneP
       setPhase('idle');
       setStartCountdown(null);
       setAccuracyPercent(null);
+      setLiveAccuracyPercent(null);
       setLayoutReady(false);
       return;
     }
@@ -227,6 +239,11 @@ export function ReactionTracingZone({ active, onComplete }: ReactionTracingZoneP
             Time remaining
           </ThemedText>
           <ThemedText type="title">{formatTime(timeRemainingSec)}</ThemedText>
+          {phase === 'tracing' && liveAccuracyPercent !== null ? (
+            <ThemedText type="body">
+              Live accuracy: {liveAccuracyPercent}%
+            </ThemedText>
+          ) : null}
         </View>
       ) : null}
 

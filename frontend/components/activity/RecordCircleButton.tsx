@@ -11,6 +11,7 @@ interface RecordCircleButtonProps {
   disabled?: boolean;
   recording?: boolean;
   label?: string;
+  compact?: boolean;
 }
 
 export function RecordCircleButton({
@@ -18,13 +19,14 @@ export function RecordCircleButton({
   disabled = false,
   recording = false,
   label,
+  compact = false,
 }: RecordCircleButtonProps) {
   const theme = useTheme();
   const displayLabel = label ?? (recording ? 'Recording…' : 'Start');
   const useMutedStyle = recording && !label;
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, compact && styles.wrapperCompact]}>
       <Pressable
         onPress={onPress}
         disabled={disabled}
@@ -56,6 +58,9 @@ const styles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
     marginTop: SpacingScale.sm,
+  },
+  wrapperCompact: {
+    marginTop: SpacingScale.xs,
   },
   button: {
     width: BUTTON_SIZE,

@@ -57,6 +57,7 @@ export default function ReactionBoardScreen() {
     null,
   );
   const [tracingSessionKey, setTracingSessionKey] = useState(0);
+  const [memberTurnComplete, setMemberTurnComplete] = useState(false);
 
   const tapController = useMemo(() => createTapReactionController(setTapState), []);
   const previousTapStage = useRef(tapState.stage);
@@ -73,6 +74,7 @@ export default function ReactionBoardScreen() {
       setPhaseComplete(false);
       setPendingReactionMs(null);
       setPendingTracing(null);
+      setMemberTurnComplete(false);
       tapController.resetToIdle();
       setRefreshKey((key) => key + 1);
       setActiveTab('submission');
@@ -99,8 +101,10 @@ export default function ReactionBoardScreen() {
   const isLastPhase = phaseIndex >= REACTION_PHASES.length - 1;
   const allPhasesComplete = phaseAggregates.length >= MAX_REACTION_PHASES;
   const currentMemberName = teamMembers[memberIndex] ?? `Member ${memberIndex + 1}`;
-  const runningAverage = getRunningGroupAverage(phaseIndex, currentPhaseTrials);
-  const showPredictionStep = !challengeActive && !phaseComplete && !allPhasesComplete;
+  const showPredictionStep =
+    !challengeActive && !memberTurnComplete && !phaseComplete && !allPhasesComplete;
+  const isLastMember = memberIndex >= teamMembers.length - 1;
+  const continueMemberLabel = isLastMember ? 'Finish phase' : 'Continue to next member';
 
   useEffect(() => {
     if (
@@ -119,6 +123,7 @@ export default function ReactionBoardScreen() {
     setChallengeActive(false);
     setPendingReactionMs(null);
     setPendingTracing(null);
+    setMemberTurnComplete(false);
     tapController.resetToIdle();
   };
 
@@ -189,13 +194,25 @@ export default function ReactionBoardScreen() {
     const reactionMs = tapController.handleZonePress();
     if (reactionMs !== null) {
       setPendingReactionMs(reactionMs);
-      recordMemberTrial(reactionMs);
+      setChallengeActive(false);
+      setMemberTurnComplete(true);
     }
   };
 
   const handleTracingComplete = (accuracy: number, durationSec: number) => {
     setPendingTracing({ accuracy, durationSec });
-    recordMemberTrial(undefined, accuracy, durationSec);
+    setChallengeActive(false);
+    setMemberTurnComplete(true);
+  };
+
+  const handleContinueToNextMember = () => {
+    if (pendingReactionMs !== null) {
+      recordMemberTrial(pendingReactionMs);
+    } else if (pendingTracing) {
+      recordMemberTrial(undefined, pendingTracing.accuracy, pendingTracing.durationSec);
+      setTracingSessionKey((key) => key + 1);
+    }
+    setMemberTurnComplete(false);
   };
 
   const handleResetPhase = () => {
@@ -249,7 +266,7 @@ export default function ReactionBoardScreen() {
           <ThemedText type="small" themeColor="textSecondary">
             {isTracingPhase
               ? `Predict ${currentMemberName}'s tracing accuracy (percent), e.g. 80%.`
-              : `Predict ${currentMemberName}'s reaction time in milliseconds, e.g. 350 ms.`}
+              : `Predict ${currentMemberName}'s reaction time in milliseconds, e.g. 500 ms.`}
           </ThemedText>
           <TextInput
             value={predictionInput}
@@ -270,9 +287,6 @@ export default function ReactionBoardScreen() {
             onZonePress={handleTapZonePress}
             onTargetPress={handleTargetPress}
           />
-          {pendingReactionMs !== null ? (
-            <StatCard label="Reaction time" value={`${pendingReactionMs} ms`} />
-          ) : null}
         </ActivitySection>
       ) : null}
 
@@ -286,15 +300,28 @@ export default function ReactionBoardScreen() {
         </ActivitySection>
       ) : null}
 
-      {runningAverage && currentPhaseTrials.length > 0 && !phaseComplete ? (
-        <ActivitySection title="Group progress">
-          <StatCard
-            label={isTracingPhase ? 'Running average accuracy' : 'Running average reaction time'}
-            value={runningAverage}
+      {memberTurnComplete && pendingReactionMs !== null ? (
+        <ActivitySection title="Member result">
+          <StatCard label={`${currentMemberName}'s reaction time`} value={`${pendingReactionMs} ms`} />
+          <AppButton
+            label={continueMemberLabel}
+            onPress={handleContinueToNextMember}
+            style={styles.buttonGap}
           />
-          <ThemedText type="small" themeColor="textSecondary">
-            {currentPhaseTrials.length} of {teamMembers.length} member(s) completed this phase.
-          </ThemedText>
+        </ActivitySection>
+      ) : null}
+
+      {memberTurnComplete && pendingTracing ? (
+        <ActivitySection title="Member result">
+          <StatCard
+            label={`${currentMemberName}'s tracing accuracy`}
+            value={`${pendingTracing.accuracy}%`}
+          />
+          <AppButton
+            label={continueMemberLabel}
+            onPress={handleContinueToNextMember}
+            style={styles.buttonGap}
+          />
         </ActivitySection>
       ) : null}
 

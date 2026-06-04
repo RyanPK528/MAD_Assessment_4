@@ -181,17 +181,18 @@ export const ACTIVITY_CATALOG: Record<ActivityId, ActivityCatalogEntry> = {
     descriptionShort:
       'Analyze breathing patterns at rest and after exercise using chest movement sensors.',
     overview: 'Students analyze breathing patterns at rest and after exercise.',
-    materials: ['Mobile phone with STEMM Lab app', 'Flat surface or exercise mat'],
+    materials: ['Mobile phone with STEMM Lab app', 'Flat surface or mat'],
     instructions: [
       'Place the phone gently on the chest.',
       'Record breathing at rest.',
-      'Perform light exercise: jog in place for one minute, then complete 100 star jumps.',
-      'Record breathing again.',
-      'Compare results.',
-      'Rotate through each team member.',
+      'Perform jogging on the spot for one minute.',
+      'Record breathing again and compare against resting results.',
+      'Perform approximately 100 star jumps (jumping jacks).',
+      'Record breathing again and compare against previous phases.',
+      'Rotate through each team member until everyone completes all three phases.',
     ],
     discussion:
-      'Breathing rate increases during exercise to supply more oxygen to muscles. Phone sensors detect chest movement and help visualize breathing patterns and recovery.',
+      'Breathing rate increases during exercise to supply more oxygen to muscles. Sensors detect chest movement, helping students visualise breathing patterns.',
   },
 };
 
