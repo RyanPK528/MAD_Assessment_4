@@ -17,10 +17,13 @@ import {
   syncPendingResults,
 } from '@/services/activityResultService';
 import { getUserProfile } from '@/services/authService';
+import { useBatteryStatus } from '@/services/batteryService';
+import { AdBannerView } from '@/services/adService';
 import { Layout, SpacingScale } from '@/constants/theme';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const { displayLevel, isCharging, isLoaded: batteryLoaded } = useBatteryStatus();
   const [teamName, setTeamName] = useState('Team');
   const [memberPreview, setMemberPreview] = useState('');
   const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
@@ -69,7 +72,16 @@ export default function DashboardScreen() {
   return (
     <ScreenContainer refreshing={refreshing} onRefresh={onRefresh}>
       <View style={styles.hero}>
-        <ThemedText type="pageTitle">Welcome {displayTeamName}!</ThemedText>
+        <View style={styles.heroRow}>
+          <ThemedText type="pageTitle" style={styles.heroTitle}>Welcome {displayTeamName}!</ThemedText>
+          {batteryLoaded && (
+            <View style={styles.batteryBadge}>
+              <ThemedText type="caption" style={styles.batteryText}>
+                {isCharging ? '🔌' : '🔋'} {displayLevel}
+              </ThemedText>
+            </View>
+          )}
+        </View>
       </View>
 
       <View style={styles.statsRow}>
@@ -124,6 +136,8 @@ export default function DashboardScreen() {
           ))
         )}
       </AppCard>
+
+      <AdBannerView />
     </ScreenContainer>
   );
 }
@@ -132,6 +146,23 @@ const styles = StyleSheet.create({
   hero: {
     gap: SpacingScale.xxs,
     marginBottom: SpacingScale.xs,
+  },
+  heroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroTitle: {
+    flex: 1,
+  },
+  batteryBadge: {
+    backgroundColor: 'rgba(100, 200, 100, 0.15)',
+    paddingHorizontal: SpacingScale.sm,
+    paddingVertical: SpacingScale.xxs,
+    borderRadius: 12,
+  },
+  batteryText: {
+    fontSize: 12,
   },
   statsRow: {
     flexDirection: 'row',
