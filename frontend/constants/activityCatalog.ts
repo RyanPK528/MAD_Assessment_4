@@ -168,7 +168,7 @@ export const ACTIVITY_CATALOG: Record<ActivityId, ActivityCatalogEntry> = {
       'Review accuracy and delay, then rotate through each team member.',
     ],
     discussion:
-      'Reaction time measures how quickly the brain processes information and sends signals to muscles. Practice can improve speed and coordination. Comparing hands demonstrates the effects of hand dominance.',
+      'Reaction time measures how quickly the brain processes information and sends signals to muscles. Practice can improve speed and coordination. Comparing hands shows how dominance affects performance.',
   },
   'breathing-trainer': {
     id: 'breathing-trainer',

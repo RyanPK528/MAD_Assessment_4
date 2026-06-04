@@ -1,232 +1,342 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, StyleSheet, TextInput } from 'react-native';
 
 import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
 import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
 import { ActivitySection } from '@/components/activity/ActivitySection';
 import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissionPanel';
+import { ReactionBoardResultsTable } from '@/components/activity/ReactionBoardResultsTable';
+import { ReactionTapZone } from '@/components/activity/ReactionTapZone';
+import { ReactionTracingZone } from '@/components/activity/ReactionTracingZone';
 import { ReflectionModal } from '@/components/activity/ReflectionModal';
-import { createReactionBoardController, ReactionBoardState } from '@/services/reactionBoardService';
+import { AppButton } from '@/components/ui/app-button';
+import { StatCard } from '@/components/ui/stat-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
-import { Radii, SpacingScale } from '@/constants/theme';
+import { SpacingScale } from '@/constants/theme';
+import { getFirebaseAuth } from '@/config/firebaseNative';
 import { useActivitySubmission } from '@/hooks/useActivitySubmission';
 import { useActivityStyles } from '@/hooks/use-activity-styles';
 import { useTheme } from '@/hooks/use-theme';
+import { getUserProfile } from '@/services/authService';
+import {
+  MAX_REACTION_PHASES,
+  REACTION_PHASES,
+  ReactionMemberTrial,
+  ReactionPhaseAggregate,
+  TapChallengeState,
+  buildMemberTrial,
+  buildPhaseAggregate,
+  buildSubmissionPayload,
+  createInitialTapChallengeState,
+  createTapReactionController,
+  getRunningGroupAverage,
+  validateFinalSubmission,
+} from '@/services/reactionBoardService';
 
-type ChallengePhase = 'tap' | 'swap' | 'tracing';
-
-const PHASES: { id: ChallengePhase; label: string; hint: string }[] = [
-  {
-    id: 'tap',
-    label: 'Phase 1 – Tap Reaction',
-    hint: 'Tap the screen as soon as the hidden button appears. Rotate through each team member.',
-  },
-  {
-    id: 'swap',
-    label: 'Phase 2 – Swap Hands',
-    hint: 'Repeat using your non-dominant hand and compare results. Rotate through each team member.',
-  },
-  {
-    id: 'tracing',
-    label: 'Phase 3 – Tracing Challenge',
-    hint: 'Tap each waypoint in order to trace the moving shape. Review accuracy and delay.',
-  },
-];
-
-const TRACE_WAYPOINTS = ['A', 'B', 'C', 'D', 'E'];
+const DEFAULT_TEAM_MEMBERS = ['Team member 1'];
 
 export default function ReactionBoardScreen() {
   const theme = useTheme();
   const activityStyles = useActivityStyles();
+
   const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activePhase, setActivePhase] = useState<ChallengePhase>('tap');
-  const [state, setState] = useState<ReactionBoardState>({
-    stage: 'idle',
-    reactionTimeMs: null,
-    message: 'Tap to Start Challenge',
-  });
-  const [tapAttempts, setTapAttempts] = useState<number[]>([]);
-  const [swapAttempts, setSwapAttempts] = useState<number[]>([]);
-  const [traceStep, setTraceStep] = useState(0);
-  const [traceStartMs, setTraceStartMs] = useState<number | null>(null);
-  const [tracingAttempts, setTracingAttempts] = useState<{ totalMs: number; accuracy: number }[]>([]);
+  const [teamMembers, setTeamMembers] = useState<string[]>(DEFAULT_TEAM_MEMBERS);
+  const [phaseIndex, setPhaseIndex] = useState(0);
+  const [memberIndex, setMemberIndex] = useState(0);
+  const [phaseAggregates, setPhaseAggregates] = useState<ReactionPhaseAggregate[]>([]);
+  const [currentPhaseTrials, setCurrentPhaseTrials] = useState<ReactionMemberTrial[]>([]);
+  const [predictionInput, setPredictionInput] = useState('');
+  const [tapState, setTapState] = useState<TapChallengeState>(createInitialTapChallengeState());
+  const [challengeActive, setChallengeActive] = useState(false);
+  const [phaseComplete, setPhaseComplete] = useState(false);
+  const [pendingReactionMs, setPendingReactionMs] = useState<number | null>(null);
+  const [pendingTracing, setPendingTracing] = useState<{ accuracy: number; durationSec: number } | null>(
+    null,
+  );
+  const [tracingSessionKey, setTracingSessionKey] = useState(0);
 
-  const controller = useMemo(() => createReactionBoardController(setState), []);
+  const tapController = useMemo(() => createTapReactionController(setTapState), []);
+  const previousTapStage = useRef(tapState.stage);
 
   const submission = useActivitySubmission({
     activityId: 'reaction-board',
     onSuccess: () => {
-      setTapAttempts([]);
-      setSwapAttempts([]);
-      setTracingAttempts([]);
-      setTraceStep(0);
-      setTraceStartMs(null);
-      controller.startChallenge();
+      setPhaseAggregates([]);
+      setCurrentPhaseTrials([]);
+      setPhaseIndex(0);
+      setMemberIndex(0);
+      setPredictionInput('');
+      setChallengeActive(false);
+      setPhaseComplete(false);
+      setPendingReactionMs(null);
+      setPendingTracing(null);
+      tapController.resetToIdle();
       setRefreshKey((key) => key + 1);
       setActiveTab('submission');
     },
   });
 
   useEffect(() => {
-    controller.startChallenge();
-    return () => controller.stop();
-  }, [controller]);
-
-  const handleTap = () => {
-    const reactionTimeMs = controller.handleTap();
-    if (reactionTimeMs !== null) {
-      if (activePhase === 'tap') {
-        setTapAttempts((current) => [reactionTimeMs, ...current].slice(0, 10));
-      } else if (activePhase === 'swap') {
-        setSwapAttempts((current) => [reactionTimeMs, ...current].slice(0, 10));
+    void (async () => {
+      const user = getFirebaseAuth().currentUser;
+      if (!user) {
+        return;
       }
+      const profile = await getUserProfile(user.uid);
+      if (profile?.memberFirstNames?.length) {
+        setTeamMembers(profile.memberFirstNames);
+      }
+    })();
+  }, []);
+
+  useEffect(() => () => tapController.dispose(), [tapController]);
+
+  const currentPhase = REACTION_PHASES[phaseIndex];
+  const isTracingPhase = currentPhase.kind === 'tracing';
+  const isLastPhase = phaseIndex >= REACTION_PHASES.length - 1;
+  const allPhasesComplete = phaseAggregates.length >= MAX_REACTION_PHASES;
+  const currentMemberName = teamMembers[memberIndex] ?? `Member ${memberIndex + 1}`;
+  const runningAverage = getRunningGroupAverage(phaseIndex, currentPhaseTrials);
+  const showPredictionStep = !challengeActive && !phaseComplete && !allPhasesComplete;
+
+  useEffect(() => {
+    if (
+      !isTracingPhase &&
+      challengeActive &&
+      !phaseComplete &&
+      previousTapStage.current === 'tooSoon' &&
+      tapState.stage === 'idle'
+    ) {
+      tapController.beginWaiting();
     }
+    previousTapStage.current = tapState.stage;
+  }, [tapState.stage, challengeActive, phaseComplete, isTracingPhase, tapController]);
+
+  const resetMemberAttempt = () => {
+    setChallengeActive(false);
+    setPendingReactionMs(null);
+    setPendingTracing(null);
+    tapController.resetToIdle();
   };
 
-  const handleTraceWaypoint = (index: number) => {
-    if (index !== traceStep) {
+  const resetCurrentPhase = () => {
+    setCurrentPhaseTrials([]);
+    setMemberIndex(0);
+    setPredictionInput('');
+    setPhaseComplete(false);
+    resetMemberAttempt();
+  };
+
+  const advanceToNextMemberOrCompletePhase = (trial: ReactionMemberTrial) => {
+    setCurrentPhaseTrials((current) => [...current, trial]);
+
+    const isLastMember = memberIndex >= teamMembers.length - 1;
+    if (isLastMember) {
+      setPhaseComplete(true);
+      setChallengeActive(false);
       return;
     }
 
-    if (traceStep === 0) {
-      setTraceStartMs(Date.now());
-    }
+    setMemberIndex((index) => index + 1);
+    setPredictionInput('');
+    resetMemberAttempt();
+  };
 
-    const nextStep = traceStep + 1;
-    if (nextStep >= TRACE_WAYPOINTS.length) {
-      const totalMs = Date.now() - (traceStartMs ?? Date.now());
-      const accuracy = 100;
-      setTracingAttempts((current) => [{ totalMs, accuracy }, ...current].slice(0, 10));
-      setTraceStep(0);
-      setTraceStartMs(null);
+  const recordMemberTrial = (
+    reactionTimeMs?: number,
+    accuracy?: number,
+    durationSec?: number,
+  ) => {
+    const trial = buildMemberTrial(
+      phaseIndex,
+      currentMemberName,
+      memberIndex,
+      predictionInput.trim(),
+      reactionTimeMs,
+      accuracy,
+      durationSec,
+    );
+    advanceToNextMemberOrCompletePhase(trial);
+  };
+
+  const handleStartChallenge = () => {
+    if (!predictionInput.trim()) {
+      Alert.alert('Prediction required', 'Enter your predicted reaction time or accuracy before starting.');
       return;
     }
 
-    setTraceStep(nextStep);
+    setPendingReactionMs(null);
+    setPendingTracing(null);
+
+    if (isTracingPhase) {
+      setChallengeActive(true);
+      setTracingSessionKey((key) => key + 1);
+      return;
+    }
+
+    tapController.beginWaiting();
+    setChallengeActive(true);
   };
 
-  const hasResults = tapAttempts.length > 0 || swapAttempts.length > 0 || tracingAttempts.length > 0;
+  const handleTapZonePress = () => {
+    tapController.handleZonePress();
+  };
 
-  const handleSubmit = () => {
-    submission.requestSubmit({
-      tapAttempts,
-      swapAttempts,
-      tracingAttempts,
+  const handleTargetPress = () => {
+    const reactionMs = tapController.handleZonePress();
+    if (reactionMs !== null) {
+      setPendingReactionMs(reactionMs);
+      recordMemberTrial(reactionMs);
+    }
+  };
+
+  const handleTracingComplete = (accuracy: number, durationSec: number) => {
+    setPendingTracing({ accuracy, durationSec });
+    recordMemberTrial(undefined, accuracy, durationSec);
+  };
+
+  const handleResetPhase = () => {
+    resetCurrentPhase();
+  };
+
+  const handleContinuePhase = () => {
+    const aggregate = buildPhaseAggregate(phaseIndex, currentPhaseTrials);
+    setPhaseAggregates((current) => {
+      const updated = [...current];
+      updated[phaseIndex] = aggregate;
+      return updated;
     });
-  };
 
-  const getTapAreaBackgroundColor = () => {
-    switch (state.stage) {
-      case 'active':
-        return '#22C55E';
-      case 'tooSoon':
-        return '#EF4444';
-      default:
-        return '#374151';
+    resetCurrentPhase();
+
+    if (!isLastPhase) {
+      setPhaseIndex((index) => index + 1);
     }
   };
+
+  const handleSubmitAttempt = () => {
+    const validation = validateFinalSubmission(phaseAggregates, teamMembers.length);
+    if (!validation.ok) {
+      Alert.alert('Incomplete attempt', validation.message ?? 'Complete all phases first.');
+      return;
+    }
+    submission.requestSubmit(buildSubmissionPayload(phaseAggregates));
+  };
+
+  const phaseCompleteAverageLabel = isTracingPhase ? 'Group average accuracy' : 'Group average reaction time';
+  const phaseCompleteAverageValue = isTracingPhase
+    ? `${getRunningGroupAverage(phaseIndex, currentPhaseTrials) ?? '0%'}`
+    : `${getRunningGroupAverage(phaseIndex, currentPhaseTrials) ?? '0 ms'}`;
 
   const overviewContent = <ActivityOverviewPanel activityId="reaction-board" />;
 
   const activityContent = (
     <ThemedView style={styles.container}>
-      <ActivitySection title="Challenge Phase">
-        <View style={styles.phaseRow}>
-          {PHASES.map((phase) => (
-            <Pressable
-              key={phase.id}
-              onPress={() => {
-                setActivePhase(phase.id);
-                if (phase.id !== 'tracing') {
-                  controller.startChallenge();
-                } else {
-                  setTraceStep(0);
-                  setTraceStartMs(null);
-                }
-              }}
-              style={[
-                activityStyles.chip,
-                activePhase === phase.id && activityStyles.chipActive,
-              ]}
-            >
-              <ThemedText
-                type="captionBold"
-                style={{ color: activePhase === phase.id ? theme.onAccent : theme.textPrimary }}
-              >
-                {phase.label.replace('Phase ', 'P')}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-        <ThemedText type="body">{PHASES.find((p) => p.id === activePhase)?.hint}</ThemedText>
+      <ActivitySection title={`Phase ${currentPhase.attemptNumber} — ${currentPhase.label}`}>
+        <ThemedText type="body">{currentPhase.instruction}</ThemedText>
+        {!phaseComplete ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.memberLabel}>
+            Member {memberIndex + 1} of {teamMembers.length}: {currentMemberName}
+          </ThemedText>
+        ) : null}
       </ActivitySection>
 
-      {(activePhase === 'tap' || activePhase === 'swap') && (
-        <>
-          <ActivitySection title="Current Stage">
-            <ThemedText type="body">Stage: {state.stage}</ThemedText>
-            <ThemedText type="small">{state.message}</ThemedText>
-            {state.reactionTimeMs !== null && state.stage === 'complete' && (
-              <ThemedText type="body" style={{ marginTop: SpacingScale.sm }}>
-                Reaction time: {state.reactionTimeMs} ms
-              </ThemedText>
-            )}
-          </ActivitySection>
-          <Pressable
-            onPress={handleTap}
-            style={[styles.tapArea, { backgroundColor: getTapAreaBackgroundColor() }]}
-          >
-            <ThemedText type="title" style={styles.tapText}>
-              {activePhase === 'swap' ? `${state.message} (non-dominant hand)` : state.message}
-            </ThemedText>
-          </Pressable>
-        </>
-      )}
-
-      {activePhase === 'tracing' && (
-        <ActivitySection title="Tracing Challenge">
-          <ThemedText type="body">Tap each waypoint in order to complete the trace.</ThemedText>
-          <View style={styles.traceRow}>
-            {TRACE_WAYPOINTS.map((label, index) => {
-              const completed = index < traceStep;
-              const active = index === traceStep;
-              return (
-                <Pressable
-                  key={label}
-                  onPress={() => handleTraceWaypoint(index)}
-                  style={[
-                    styles.traceNode,
-                    {
-                      borderColor: theme.border,
-                      backgroundColor: completed ? theme.success : active ? theme.accent : theme.backgroundElement,
-                    },
-                  ]}
-                >
-                  <ThemedText type="captionBold" style={{ color: completed || active ? '#fff' : theme.textPrimary }}>
-                    {label}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
-          {tracingAttempts[0] && (
-            <ThemedText type="small">
-              Last trace: {tracingAttempts[0].totalMs} ms, {tracingAttempts[0].accuracy}% accuracy
-            </ThemedText>
-          )}
+      {showPredictionStep ? (
+        <ActivitySection title="Prediction">
+          <ThemedText type="small" themeColor="textSecondary">
+            {isTracingPhase
+              ? `Predict ${currentMemberName}'s tracing accuracy (percent), e.g. 80%.`
+              : `Predict ${currentMemberName}'s reaction time in milliseconds, e.g. 350 ms.`}
+          </ThemedText>
+          <TextInput
+            value={predictionInput}
+            onChangeText={setPredictionInput}
+            placeholder={isTracingPhase ? 'e.g. 80%' : 'e.g. 350 ms'}
+            placeholderTextColor={theme.textSecondary}
+            style={activityStyles.input}
+          />
+          <AppButton label="Start challenge" onPress={handleStartChallenge} style={styles.buttonGap} />
         </ActivitySection>
-      )}
+      ) : null}
 
-      <ActivitySection title="Submit">
-        <Button
-          title="Submit attempt"
-          onPress={handleSubmit}
-          disabled={!submission.canSubmit || !hasResults}
-        />
-      </ActivitySection>
+      {!isTracingPhase && challengeActive ? (
+        <ActivitySection title="Reaction Zone">
+          <ReactionTapZone
+            state={tapState}
+            nonDominantHand={currentPhase.kind === 'tap-non-dominant'}
+            onZonePress={handleTapZonePress}
+            onTargetPress={handleTargetPress}
+          />
+          {pendingReactionMs !== null ? (
+            <StatCard label="Reaction time" value={`${pendingReactionMs} ms`} />
+          ) : null}
+        </ActivitySection>
+      ) : null}
+
+      {isTracingPhase && challengeActive ? (
+        <ActivitySection title="Tracing Zone">
+          <ReactionTracingZone
+            key={tracingSessionKey}
+            active={challengeActive}
+            onComplete={handleTracingComplete}
+          />
+        </ActivitySection>
+      ) : null}
+
+      {runningAverage && currentPhaseTrials.length > 0 && !phaseComplete ? (
+        <ActivitySection title="Group progress">
+          <StatCard
+            label={isTracingPhase ? 'Running average accuracy' : 'Running average reaction time'}
+            value={runningAverage}
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            {currentPhaseTrials.length} of {teamMembers.length} member(s) completed this phase.
+          </ThemedText>
+        </ActivitySection>
+      ) : null}
+
+      {phaseComplete ? (
+        <ActivitySection title="Phase complete">
+          <ThemedText type="body">All team members have completed this phase.</ThemedText>
+          <StatCard label={phaseCompleteAverageLabel} value={phaseCompleteAverageValue} />
+          <AppButton
+            label="Reset phase"
+            onPress={handleResetPhase}
+            variant="outline"
+            style={styles.buttonGap}
+          />
+          <AppButton
+            label={isLastPhase ? 'Save phases' : 'Continue to next phase'}
+            onPress={handleContinuePhase}
+            style={styles.buttonGap}
+          />
+        </ActivitySection>
+      ) : null}
+
+      {phaseAggregates.length > 0 || currentPhaseTrials.length > 0 ? (
+        <ActivitySection title="Current attempt">
+          <ReactionBoardResultsTable
+            phases={
+              phaseComplete
+                ? [...phaseAggregates, buildPhaseAggregate(phaseIndex, currentPhaseTrials)]
+                : phaseAggregates
+            }
+          />
+        </ActivitySection>
+      ) : null}
+
+      {allPhasesComplete ? (
+        <ActivitySection title="Submit">
+          <AppButton
+            label="Submit attempt"
+            onPress={handleSubmitAttempt}
+            disabled={!submission.canSubmit}
+          />
+        </ActivitySection>
+      ) : null}
     </ThemedView>
   );
 
@@ -258,27 +368,6 @@ export default function ReactionBoardScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: SpacingScale.xs },
-  phaseRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SpacingScale.xs },
-  tapArea: {
-    minHeight: 200,
-    marginTop: SpacingScale.sm,
-    borderRadius: Radii.xl,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tapText: { color: '#FFFFFF', textAlign: 'center' },
-  traceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: SpacingScale.xs,
-    marginTop: SpacingScale.sm,
-  },
-  traceNode: {
-    width: 48,
-    height: 48,
-    borderRadius: Radii.pill,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  memberLabel: { marginTop: SpacingScale.sm },
+  buttonGap: { marginTop: SpacingScale.sm },
 });
