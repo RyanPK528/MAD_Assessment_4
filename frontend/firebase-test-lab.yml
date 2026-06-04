@@ -1,0 +1,10 @@
+gcloud:
+  project: stemm-lab
+testLab:
+  type: instrumentation
+  app: build/outputs/apk/release/app-release.apk
+  devices:
+    - model: Pixel2
+      version: "30"
+      locale: en
+      orientation: portrait

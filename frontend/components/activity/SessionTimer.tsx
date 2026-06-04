@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 import { Button, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -26,15 +25,6 @@ export function SessionTimer({
   label = 'Session time',
 }: SessionTimerProps) {
   const theme = useTheme();
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
 
   const formatTime = (sec: number) => {
     const m = Math.floor(sec / 60);

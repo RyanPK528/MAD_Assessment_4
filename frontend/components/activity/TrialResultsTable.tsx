@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/constants/theme';
+import { SpacingScale } from '@/constants/theme';
 
 export interface TrialRow {
   label: string;
@@ -13,14 +13,18 @@ export interface TrialRow {
 
 interface TrialResultsTableProps {
   rows: TrialRow[];
+  labelHeader?: string;
   predictionHeader?: string;
   outcomeHeader?: string;
+  showCorrectColumn?: boolean;
 }
 
 export function TrialResultsTable({
   rows,
+  labelHeader = 'Action',
   predictionHeader = 'Prediction',
   outcomeHeader = 'Outcome',
+  showCorrectColumn = false,
 }: TrialResultsTableProps) {
   const theme = useTheme();
 
@@ -35,38 +39,51 @@ export function TrialResultsTable({
   return (
     <View style={[styles.table, { borderColor: theme.border }]}>
       <View style={[styles.headerRow, { backgroundColor: theme.backgroundSelected }]}>
-        <ThemedText type="smallBold" style={styles.colLabel}>
-          Action
+        <ThemedText type="captionBold" style={styles.colLabel}>
+          {labelHeader}
         </ThemedText>
-        <ThemedText type="smallBold" style={styles.colPred}>
+        <ThemedText type="captionBold" style={styles.colPred}>
           {predictionHeader}
         </ThemedText>
-        <ThemedText type="smallBold" style={styles.colOutcome}>
+        <ThemedText type="captionBold" style={styles.colOutcome}>
           {outcomeHeader}
         </ThemedText>
+        {showCorrectColumn ? (
+          <ThemedText type="captionBold" style={styles.colCorrect}>
+            Were you right?
+          </ThemedText>
+        ) : null}
       </View>
       {rows.map((row, index) => (
         <View
           key={`${row.label}-${index}`}
           style={[styles.dataRow, { borderTopColor: theme.border }]}
         >
-          <ThemedText type="small" style={styles.colLabel}>
+          <ThemedText type="caption" style={styles.colLabel}>
             {row.label}
           </ThemedText>
-          <ThemedText type="small" style={[styles.colPred, { color: theme.textSecondary }]}>
+          <ThemedText type="caption" style={[styles.colPred, { color: theme.textSecondary }]}>
             {row.prediction}
           </ThemedText>
-          <View style={styles.colOutcome}>
-            <ThemedText type="small">{row.outcome}</ThemedText>
-            {row.correct !== undefined && row.correct !== null && (
-              <ThemedText
-                type="small"
-                style={{ color: row.correct ? theme.success : theme.danger }}
-              >
-                {row.correct ? 'Correct' : 'Incorrect'}
-              </ThemedText>
-            )}
-          </View>
+          <ThemedText type="caption" style={styles.colOutcome}>
+            {row.outcome}
+          </ThemedText>
+          {showCorrectColumn ? (
+            <View style={styles.colCorrect}>
+              {row.correct === null || row.correct === undefined ? (
+                <ThemedText type="caption" themeColor="textSecondary">
+                  —
+                </ThemedText>
+              ) : (
+                <ThemedText
+                  type="captionBold"
+                  style={{ color: row.correct ? theme.success : theme.danger }}
+                >
+                  {row.correct ? 'Yes' : 'No'}
+                </ThemedText>
+              )}
+            </View>
+          ) : null}
         </View>
       ))}
     </View>
@@ -76,27 +93,35 @@ export function TrialResultsTable({
 const styles = StyleSheet.create({
   table: {
     borderWidth: 1,
-    borderRadius: Spacing.three,
+    borderRadius: SpacingScale.md,
     overflow: 'hidden',
   },
   headerRow: {
     flexDirection: 'row',
-    padding: Spacing.two,
+    padding: SpacingScale.sm,
+    gap: SpacingScale.xxs,
   },
   dataRow: {
     flexDirection: 'row',
-    padding: Spacing.two,
+    padding: SpacingScale.sm,
     borderTopWidth: 1,
     alignItems: 'flex-start',
+    gap: SpacingScale.xxs,
   },
   colLabel: {
-    flex: 1.2,
+    flex: 0.9,
+    minWidth: 0,
   },
   colPred: {
-    flex: 1,
+    flex: 1.1,
+    minWidth: 0,
   },
   colOutcome: {
-    flex: 1.2,
-    gap: Spacing.one,
+    flex: 1.1,
+    minWidth: 0,
+  },
+  colCorrect: {
+    flex: 0.7,
+    minWidth: 0,
   },
 });

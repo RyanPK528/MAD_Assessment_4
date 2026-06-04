@@ -1,199 +1,234 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
+import { useCallback, useState } from 'react';
+import { useFocusLoad } from '@/hooks/use-focus-load';
+import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppButton } from '@/components/ui/app-button';
+import { AppCard } from '@/components/ui/app-card';
+import { AppInput } from '@/components/ui/app-input';
+import { SectionHeader } from '@/components/ui/section-header';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useThemeContext } from '@/components/ThemeContext';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/constants/theme';
-
-const gradeOptions = ['9', '10', '11', '12'];
+import { useUiStyles } from '@/hooks/use-ui-styles';
+import { getFirebaseAuth } from '@/config/firebaseNative';
+import { getUserProfile, TeamGradeLevel, updateTeamProfile } from '@/services/authService';
+import { fetchGroupForUser } from '@/services/groupService';
+import { Layout, Radii, SpacingScale } from '@/constants/theme';
 
 export default function SettingsScreen() {
   const theme = useTheme();
+  const ui = useUiStyles();
   const { mode, setMode } = useThemeContext();
-  const [displayName, setDisplayName] = useState('Alya');
-  const [gradeLevel, setGradeLevel] = useState('10');
+  const [teamName, setTeamName] = useState('');
+  const [gradeLevel, setGradeLevel] = useState<TeamGradeLevel>('Year 7');
+  const [memberNames, setMemberNames] = useState<string[]>([]);
+  const [teamDiscriminatorId, setTeamDiscriminatorId] = useState('');
+  const [newMemberName, setNewMemberName] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    const uid = getFirebaseAuth()?.currentUser?.uid;
+    if (!uid) return;
+    const [profile, group] = await Promise.all([getUserProfile(uid), fetchGroupForUser(uid)]);
+    if (profile) {
+      setTeamName(profile.teamName);
+      setGradeLevel(profile.gradeLevel);
+      setMemberNames(profile.memberFirstNames);
+    }
+    if (group?.teamDiscriminatorId) {
+      setTeamDiscriminatorId(group.teamDiscriminatorId);
+    }
+  }, []);
+
+  useFocusLoad(load);
+
+  const addMember = () => {
+    const trimmed = newMemberName.trim();
+    if (!trimmed) return;
+    if (memberNames.includes(trimmed)) {
+      Alert.alert('Duplicate member', 'That member name already exists.');
+      return;
+    }
+    setMemberNames((current) => [...current, trimmed]);
+    setNewMemberName('');
+  };
+
+  const removeMember = (name: string) => {
+    setMemberNames((current) => current.filter((entry) => entry !== name));
+  };
+
+  const handleSave = async () => {
+    const uid = getFirebaseAuth()?.currentUser?.uid;
+    if (!uid) {
+      Alert.alert('Error', 'You must be signed in.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await updateTeamProfile(uid, { teamName, gradeLevel, memberFirstNames: memberNames });
+      Alert.alert('Saved', 'Team profile updated successfully.');
+    } catch (error) {
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to update team.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: theme.background }]}> 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ThemedText type="title">Settings</ThemedText>
-        <ThemedText type="small" style={[styles.subtitle, { color: theme.textSecondary }]}>Personalize your profile and app preferences.</ThemedText>
-
-        <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <View style={styles.fieldHeader}>
-            <ThemedText type="subtitle">Profile</ThemedText>
-            <SymbolView name="person.crop.circle.fill" tintColor={theme.accent} size={20} />
+    <ThemedView style={ui.screen}>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.pageHeader}>
+            <ThemedText type="pageTitle">Settings</ThemedText>
+            <ThemedText type="caption" themeColor="textSecondary">
+              Manage your team and app preferences
+            </ThemedText>
           </View>
 
-          <ThemedText type="smallBold" style={styles.label}>Display username</ThemedText>
-          <TextInput
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Enter your display name"
-            placeholderTextColor={theme.muted}
-            style={[styles.input, { backgroundColor: theme.backgroundSelected, color: theme.text }]}
-          />
-
-          <ThemedText type="smallBold" style={styles.label}>Grade level</ThemedText>
-          <View style={styles.selectRow}>
-            {gradeOptions.map((option) => (
-              <Pressable
-                key={option}
-                onPress={() => setGradeLevel(option)}
-                style={({ pressed }) => [
-                  styles.gradeOption,
-                  gradeLevel === option && styles.gradeOptionActive,
-                  pressed && styles.optionPressed,
-                  { backgroundColor: gradeLevel === option ? theme.accent : theme.backgroundSelected },
-                ]}>
-                <ThemedText type="body" style={gradeLevel === option ? styles.gradeTextActive : [styles.gradeText, { color: theme.text }]}>{option}</ThemedText>
-              </Pressable>
-            ))}
-          </View>
-        </ThemedView>
-
-        <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <View style={styles.fieldHeader}>
-            <ThemedText type="subtitle">Theme</ThemedText>
-            <SymbolView name="moon.fill" tintColor={theme.accent} size={20} />
-          </View>
-
-          <View style={styles.themeRow}>
-            <Pressable
-              onPress={() => setMode('light')}
-              style={({ pressed }) => [
-                styles.themeOption,
-                mode === 'light' && styles.themeOptionActive,
-                pressed && styles.optionPressed,
-                { backgroundColor: mode === 'light' ? theme.accent : theme.backgroundSelected },
-              ]}>
-              <ThemedText type="body" style={mode === 'light' ? styles.themeTextActive : [styles.themeText, { color: theme.text }]}>
-                Light Mode
+          {teamDiscriminatorId ? (
+            <AppCard>
+              <ThemedText type="captionBold" themeColor="textSecondary">
+                Team ID
               </ThemedText>
-            </Pressable>
-            <Pressable
-              onPress={() => setMode('dark')}
-              style={({ pressed }) => [
-                styles.themeOption,
-                mode === 'dark' && styles.themeOptionActive,
-                pressed && styles.optionPressed,
-                { backgroundColor: mode === 'dark' ? theme.accent : theme.backgroundSelected },
-              ]}>
-              <ThemedText type="body" style={mode === 'dark' ? styles.themeTextActive : [styles.themeText, { color: theme.text }]}>
-                Dark Mode
+              <ThemedText type="sectionTitle" style={styles.teamId}>
+                {teamDiscriminatorId}
               </ThemedText>
-            </Pressable>
-          </View>
-        </ThemedView>
+            </AppCard>
+          ) : null}
 
-        <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}> 
-          <View style={styles.fieldHeader}>
-            <ThemedText type="subtitle">General</ThemedText>
-            <SymbolView name="slider.horizontal.3" tintColor={theme.accent} size={20} />
-          </View>
+          <AppCard>
+            <SectionHeader title="Team profile" subtitle="Update your team details" />
+            <AppInput label="Team name" value={teamName} onChangeText={setTeamName} />
+            <ThemedText type="captionBold" style={styles.fieldLabel}>
+              Grade level
+            </ThemedText>
+            <View style={styles.chipRow}>
+              {(['Year 5', 'Year 6', 'Year 7', 'Year 8', 'Year 9', 'Year 10'] as const).map((year) => {
+                const selected = gradeLevel === year;
+                return (
+                  <Pressable
+                    key={year}
+                    onPress={() => setGradeLevel(year)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[ui.chip, selected && ui.chipActive]}
+                  >
+                    <ThemedText type="captionBold" style={{ color: selected ? theme.onAccent : theme.textPrimary }}>
+                      {year}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </AppCard>
 
-          <View style={[styles.settingItem, { borderBottomColor: theme.border }]}> 
-            <ThemedText type="body">Notifications</ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>Manage alerts later</ThemedText>
-          </View>
-          <View style={[styles.settingItem, { borderBottomColor: theme.border }]}> 
-            <ThemedText type="body">Privacy</ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>Account access settings</ThemedText>
-          </View>
-          <View style={styles.settingItem}> 
-            <ThemedText type="body">Support</ThemedText>
-            <ThemedText type="small" style={{ color: theme.textSecondary }}>Get help when you need it</ThemedText>
-          </View>
-        </ThemedView>
-      </ScrollView>
+          <AppCard>
+            <SectionHeader title="Members" subtitle={`${memberNames.length} team member(s)`} />
+            <View style={styles.membersList}>
+              {memberNames.map((member) => (
+                <View key={member} style={[styles.memberRow, { borderColor: theme.border }]}>
+                  <ThemedText type="bodyMedium">{member}</ThemedText>
+                  <Pressable
+                    onPress={() => removeMember(member)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${member}`}
+                    style={[styles.removeButton, { backgroundColor: theme.dangerMuted }]}
+                  >
+                    <ThemedText type="captionBold" themeColor="danger">
+                      Remove
+                    </ThemedText>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+            <AppInput
+              label="Add member"
+              value={newMemberName}
+              onChangeText={setNewMemberName}
+              placeholder="First name"
+            />
+            <AppButton label="Add member" onPress={addMember} variant="secondary" />
+          </AppCard>
+
+          <AppCard>
+            <SectionHeader title="Appearance" subtitle="Choose light or dark mode" />
+            <View style={styles.themeRow}>
+              {(['light', 'dark'] as const).map((option) => {
+                const selected = mode === option;
+                return (
+                  <Pressable
+                    key={option}
+                    onPress={() => setMode(option)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    style={[styles.themeOption, selected && { backgroundColor: theme.accent, borderColor: theme.accent }, !selected && { borderColor: theme.border }]}
+                  >
+                    <ThemedText type="bodyMedium" style={{ color: selected ? theme.onAccent : theme.textPrimary }}>
+                      {option === 'light' ? 'Light' : 'Dark'}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </AppCard>
+
+          <AppButton label={loading ? 'Saving…' : 'Save team changes'} onPress={handleSave} loading={loading} variant="success" />
+        </ScrollView>
+      </SafeAreaView>
     </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
   content: {
-    padding: Spacing.four,
-    gap: Spacing.four,
-    paddingBottom: Spacing.six,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: SpacingScale.xl,
+    paddingBottom: SpacingScale.huge,
+    gap: Layout.sectionGap,
   },
-  subtitle: {
-    marginTop: Spacing.one,
-    marginBottom: Spacing.three,
+  pageHeader: {
+    gap: SpacingScale.xxs,
   },
-  card: {
-    padding: Spacing.four,
-    borderRadius: Spacing.four,
-    borderWidth: 1,
-    gap: Spacing.three,
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
-    shadowRadius: 18,
-    elevation: 3,
+  teamId: {
+    letterSpacing: 4,
   },
-  fieldHeader: {
+  fieldLabel: {
+    marginTop: SpacingScale.xs,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SpacingScale.xs,
+  },
+  membersList: {
+    gap: SpacingScale.xs,
+  },
+  memberRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingVertical: SpacingScale.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  label: {
-    marginTop: Spacing.two,
-  },
-  input: {
-    marginTop: Spacing.two,
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-  },
-  selectRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.two,
-    marginTop: Spacing.two,
-  },
-  gradeOption: {
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    borderRadius: 999,
-  },
-  gradeOptionActive: {
-  },
-  gradeText: {
-  },
-  gradeTextActive: {
-    color: '#FFF',
+  removeButton: {
+    paddingHorizontal: SpacingScale.sm,
+    paddingVertical: SpacingScale.xxs,
+    borderRadius: Radii.pill,
   },
   themeRow: {
     flexDirection: 'row',
-    gap: Spacing.three,
-    marginTop: Spacing.two,
+    gap: SpacingScale.sm,
   },
   themeOption: {
     flex: 1,
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    borderRadius: Spacing.three,
+    minHeight: Layout.buttonHeightSm,
+    borderRadius: Radii.md,
+    borderWidth: 1,
     alignItems: 'center',
-  },
-  themeOptionActive: {
-  },
-  themeText: {
-  },
-  themeTextActive: {
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  optionPressed: {
-    opacity: 0.85,
-  },
-  settingItem: {
-    marginTop: Spacing.two,
-    paddingVertical: Spacing.three,
-    borderBottomWidth: 1,
-    gap: Spacing.one,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
 });

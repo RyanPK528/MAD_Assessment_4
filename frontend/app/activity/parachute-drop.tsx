@@ -1,7 +1,15 @@
 import { CameraView, useCameraPermissions,useMicrophonePermissions } from 'expo-camera';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Button, StyleSheet, TextInput, View } from 'react-native';
 
+import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
+import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
+import { ActivitySection } from '@/components/activity/ActivitySection';
+import { ActivitySectionHeading } from '@/components/activity/ActivitySectionHeading';
+import {
+  ActivitySubmissionPanel,
+} from '@/components/activity/ActivitySubmissionPanel';
+import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
 import { PhysicsResultPanel } from '@/components/activity/PhysicsResultPanel';
 import { SessionTimer } from '@/components/activity/SessionTimer';
@@ -9,14 +17,15 @@ import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
-import { saveActivityResult } from '@/services/activityResultService';
+import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { useActivitySubmission } from '@/hooks/useActivitySubmission';
 import {
   createEmptyTrial,
   createParachuteDropController,
   ParachuteDropState,
   SESSION_MAX_SEC,
 } from '@/services/parachuteDropService';
-import { Spacing } from '@/constants/theme';
+import { SpacingScale } from '@/constants/theme';
 
 export default function ParachuteDropScreen() {
   const theme = useTheme();
@@ -37,11 +46,30 @@ export default function ParachuteDropScreen() {
   const [massInput, setMassInput] = useState('0.2');
   const [contactInput, setContactInput] = useState('');
   const [showCamera, setShowCamera] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [permission, requestPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const [isRecording, setIsRecording] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+
+  const submission = useActivitySubmission({
+    activityId: 'parachute-drop',
+    onSuccess: () => {
+      setState((current) => ({
+        ...current,
+        phase: 'setup',
+        trials: [createEmptyTrial(0), createEmptyTrial(1), createEmptyTrial(2)],
+        activeTrialIndex: 0,
+        sessionTimerSec: 0,
+        sessionRunning: false,
+        reflection: '',
+        message: 'Attempt submitted. Start a new attempt from the Activity tab.',
+      }));
+      setRefreshKey((key) => key + 1);
+      setActiveTab('submission');
+    },
+  });
 
   const controller = useMemo(() => {
     const ctrl = createParachuteDropController(setState);
@@ -107,21 +135,13 @@ export default function ParachuteDropScreen() {
     }
   };
 
-  const handleSubmit = async () => {
-    setSubmitting(true);
-    try {
-      await saveActivityResult('parachute-drop', {
-        dropHeightM: state.dropHeightM,
-        toyMassKg: state.toyMassKg,
-        trials: state.trials,
-        sessionTimerSec: state.sessionTimerSec,
-      }, { reflection: state.reflection });
-      setState((s) => ({ ...s, message: 'Results saved.' }));
-    } catch {
-      setState((s) => ({ ...s, message: 'Saved offline.' }));
-    } finally {
-      setSubmitting(false);
-    }
+  const handleSubmit = () => {
+    submission.requestSubmit({
+      dropHeightM: state.dropHeightM,
+      toyMassKg: state.toyMassKg,
+      trials: state.trials,
+      sessionTimerSec: state.sessionTimerSec,
+    });
   };
 
  if (showCamera && permission?.granted) {
@@ -145,15 +165,12 @@ export default function ParachuteDropScreen() {
       </View>
     );
   }
+  
+  const overviewContent = <ActivityOverviewPanel activityId="parachute-drop" />;
 
-  return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.background }}>
+  const activityContent = (
       <ThemedView style={styles.container}>
-        <ThemedText type="title">Parachute Drop Challenge</ThemedText>
-        <ThemedText type="body" style={{ color: theme.textSecondary }}>
-          Drop your toy from a fixed height, record fall time and slow-motion contact time, then compare up to 3 parachute designs.
-        </ThemedText>
-
+        <ActivitySection title="Design Session">
         <SessionTimer
           elapsedSec={state.sessionTimerSec}
           maxSec={SESSION_MAX_SEC}
@@ -163,9 +180,9 @@ export default function ParachuteDropScreen() {
           onReset={() => controller.resetSessionTimer()}
           label="20-minute design session"
         />
+        </ActivitySection>
 
-        <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <ThemedText type="subtitle">Setup</ThemedText>
+        <ActivitySection title="Setup">
           <ThemedText type="small">Drop height (m)</ThemedText>
           <TextInput
             value={heightInput}
@@ -187,10 +204,11 @@ export default function ParachuteDropScreen() {
             style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
           />
           <Button title="Begin trials" onPress={() => controller.setPhase('recording')} />
-        </ThemedView>
+        </ActivitySection>
 
         {state.phase !== 'setup' && activeTrial && (
           <>
+            <ActivitySection title="Prototype Trials">
             <View style={styles.trialTabs}>
               {[0, 1, 2].map((i) => (
                 <Button
@@ -210,8 +228,7 @@ export default function ParachuteDropScreen() {
               onPredictionChange={(v) => controller.updateActiveTrial({ prediction: v })}
             />
 
-            <ThemedView style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-              <ThemedText type="subtitle">Drop timer</ThemedText>
+            <ActivitySectionHeading title="Drop timer" />
               <ThemedText type="title">
                 {state.dropTimerRunning ? state.dropTimerSec.toFixed(3) : activeTrial.fallTimeSec?.toFixed(3) ?? '0.000'} s
               </ThemedText>
@@ -222,7 +239,6 @@ export default function ParachuteDropScreen() {
                   <Button title="Toy hit ground — stop" onPress={() => controller.stopDropTimer()} />
                 )}
               </View>
-            </ThemedView>
 
             <ThemedText type="small">Contact time from slow-motion (s)</ThemedText>
             <TextInput
@@ -253,10 +269,12 @@ export default function ParachuteDropScreen() {
                 gForce: activeTrial.gForce,
               }}
             />
+            </ActivitySection>
           </>
         )}
 
         {state.trials.some((t) => t.fallTimeSec !== null) && (
+          <ActivitySection title="Results Summary">
           <TrialResultsTable
             rows={state.trials
               .filter((t) => t.fallTimeSec !== null)
@@ -266,36 +284,52 @@ export default function ParachuteDropScreen() {
                 outcome: `${t.fallTimeSec?.toFixed(3)} s fall${t.gForce !== null ? `, ${t.gForce.toFixed(1)} g` : ''}`,
               }))}
           />
+          </ActivitySection>
         )}
 
-        <ThemedText type="small">Team reflection</ThemedText>
-        <TextInput
-          value={state.reflection}
-          onChangeText={(v) => controller.setReflection(v)}
-          multiline
-          placeholder="Which parachute design was best? Were your timing predictions correct?"
-          placeholderTextColor={theme.textSecondary}
-          style={[styles.reflection, { color: theme.textPrimary, borderColor: theme.border }]}
-        />
+        <ActivitySection title="Submit">
         <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
         <Button
-          title={submitting ? 'Saving…' : 'Submit results'}
+          title="Submit attempt"
           onPress={handleSubmit}
-          disabled={submitting || !state.trials.some((t) => t.fallTimeSec !== null)}
+          disabled={!submission.canSubmit || !state.trials.some((t) => t.fallTimeSec !== null)}
         />
+        </ActivitySection>
       </ThemedView>
-    </ScrollView>
+  );
+
+  const submissionContent = (
+    <ActivitySubmissionPanel activityId="parachute-drop" refreshKey={refreshKey} />
+  );
+
+  return (
+    <>
+      <ActivityLayout
+        activityName="Parachute Drop Challenge"
+        overviewContent={overviewContent}
+        activityContent={activityContent}
+        submissionContent={submissionContent}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
+      <ReflectionModal
+        visible={submission.modalVisible}
+        activityName={ACTIVITY_CATALOG['parachute-drop'].label}
+        submitting={submission.submitting}
+        errorMessage={submission.submitError}
+        onConfirm={submission.confirmSubmit}
+        onCancel={submission.cancelSubmit}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { padding: Spacing.four, gap: Spacing.three, paddingBottom: Spacing.six },
-  card: { padding: Spacing.four, borderRadius: Spacing.three, borderWidth: 1, gap: Spacing.two },
-  input: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two },
-  buttonRow: { flexDirection: 'row', gap: Spacing.two, alignItems: 'center', flexWrap: 'wrap' },
-  trialTabs: { flexDirection: 'row', gap: Spacing.two },
-  reflection: { borderWidth: 1, borderRadius: Spacing.two, padding: Spacing.two, minHeight: 80, textAlignVertical: 'top' },
+  container: { gap: SpacingScale.xs },
+  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
+  buttonRow: { flexDirection: 'row', gap: SpacingScale.sm, alignItems: 'center', flexWrap: 'wrap' },
+  trialTabs: { flexDirection: 'row', gap: SpacingScale.sm },
   cameraContainer: { flex: 1 },
   camera: { flex: 1 },
-  cameraControls: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: Spacing.three },
+  cameraControls: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: SpacingScale.md },
 });
