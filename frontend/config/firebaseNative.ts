@@ -1,11 +1,11 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import { getApps, initializeApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence, type Auth } from 'firebase/auth';
+import { getApp, getApps, initializeApp, FirebaseApp } from 'firebase/app';
+import { getAuth, initializeAuth, Auth, Firestore, getReactNativePersistence } from 'firebase/auth';
+// @ts-ignore: getReactNativePersistence is available in the native SDK but not always in the web types used by TS
 import { getFirestore } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Load Firebase config from environment with proper fallbacks
 const getConfigValue = (key: string): string => {
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     const value = process.env[key];
@@ -20,8 +20,8 @@ const getConfigValue = (key: string): string => {
     // Constants may not be available in all contexts.
   }
 
-  if (typeof globalThis !== 'undefined' && (globalThis as any)[key]) {
-    return (globalThis as any)[key];
+  if (typeof globalThis !== 'undefined' && (globalThis as Record<string, string>)[key]) {
+    return (globalThis as Record<string, string>)[key];
   }
 
   return '';
@@ -36,57 +36,50 @@ const firebaseConfig = {
   appId: getConfigValue('EXPO_PUBLIC_FIREBASE_APP_ID'),
 };
 
-// eslint-disable-next-line no-console
-console.log('[Firebase] Configuration loaded:');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   projectId:', firebaseConfig.projectId ? '✓' : '✗ MISSING');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   apiKey:', firebaseConfig.apiKey ? '✓' : '✗ MISSING');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   authDomain:', firebaseConfig.authDomain ? '✓' : '✗ MISSING');
-// eslint-disable-next-line no-console
-console.log('[Firebase]   Platform:', Platform.OS);
-
-if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
-  // eslint-disable-next-line no-console
-  console.error('[Firebase] Missing critical configuration. Check .env file and app.config.js');
+if (__DEV__) {
+  console.log(`[Firebase] Initializing for ${Platform.OS} (Project: ${firebaseConfig.projectId || 'Unknown'})`);
 }
 
-const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
+if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
+  console.error('[Firebase] Missing critical configuration. Ensure EXPO_PUBLIC_FIREBASE_* variables are set.');
+}
 
-const createFirebaseAuth = (): Auth => {
-  if (Platform.OS !== 'web') {
-    try {
-      // eslint-disable-next-line no-console
-      console.log('[Firebase] Attempting native Auth initialization with AsyncStorage persistence...');
-      const auth = initializeAuth(app, {
-        persistence: getReactNativePersistence(AsyncStorage),
-      });
-      // eslint-disable-next-line no-console
-      console.log('[Firebase] Native Auth initialized successfully');
-      return auth;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      // eslint-disable-next-line no-console
-      console.warn('[Firebase] Native auth initialization failed; falling back to getAuth().', message);
-    }
-  } else {
-    // eslint-disable-next-line no-console
-    console.log('[Firebase] Web platform detected, using getAuth()');
-  }
+let firebaseApp: FirebaseApp | undefined;
+let firebaseAuth: Auth | undefined;
+let firebaseFirestore: Firestore | undefined;
 
-  try {
-    const auth = getAuth(app);
-    // eslint-disable-next-line no-console
-    console.log('[Firebase] Firebase Auth initialized with fallback getAuth()');
-    return auth;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    // eslint-disable-next-line no-console
-    console.error('[Firebase] Fallback Auth initialization failed.', message);
-    throw error;
+export function isFirebaseConfigured(): boolean {
+  return Boolean(firebaseConfig.projectId && firebaseConfig.apiKey);
+}
+
+export const getFirebaseApp = (): FirebaseApp => {
+  if (!firebaseApp) {
+    firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   }
+  return firebaseApp;
 };
 
-export const firebaseAuth = createFirebaseAuth();
-export const firebaseFirestore = getFirestore(app);
+export const getFirebaseAuth = (): Auth => {
+  if (firebaseAuth) return firebaseAuth;
+
+  const app = getFirebaseApp();
+  if (Platform.OS === 'web') {
+    firebaseAuth = getAuth(app);
+  } else {
+    try {
+      firebaseAuth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage),
+      });
+    } catch {
+      firebaseAuth = getAuth(app);
+    }
+  }
+  return firebaseAuth;
+};
+
+export const getFirebaseFirestore = (): Firestore => {
+  if (!firebaseFirestore) {
+    firebaseFirestore = getFirestore(getFirebaseApp());
+  }
+  return firebaseFirestore;
+};

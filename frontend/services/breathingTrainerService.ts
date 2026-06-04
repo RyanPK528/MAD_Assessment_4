@@ -34,12 +34,12 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingTrai
 
   const getMessage = () => {
     if (phase === 'Resting') {
-      return 'Stand still and breathe naturally for the resting baseline.';
+      return 'Place the phone gently on your chest. Breathe naturally at rest.';
     }
     if (phase === 'PostExercise1') {
-      return 'Jog in place and allow chest motion patterns to increase.';
+      return 'Jog in place for one minute, then keep recording.';
     }
-    return 'Perform star jumps and allow the trainer to capture elevated breathing rhythm.';
+    return 'Complete 100 star jumps, then keep recording.';
   };
 
   const publish = () => {
@@ -72,7 +72,7 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingTrai
 
     // Sensors not available on web
     if (Platform.OS === 'web') {
-      // eslint-disable-next-line no-console
+       
       console.warn('[BreathingTrainer] Accelerometer not available on web platform');
       intervalHandle = setInterval(() => {
         secondsElapsed += 1;

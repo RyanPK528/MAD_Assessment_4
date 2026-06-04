@@ -1,16 +1,31 @@
 {
   "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d4677c44-0837-4863-9108-c46c2c5133b9"
+      }
+    },
     "name": "frontend",
     "slug": "frontend",
+    "name": "StemmLab",
+    "slug": "StemmLab",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "frontend",
+    "scheme": "StemmLab",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.anonymous.frontend"
     },
     "android": {
+      "package": "com.anonymous.frontend",
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -25,10 +40,16 @@
     },
     "plugins": [
       "expo-router",
+      "expo-av",
+      "expo-camera",
       [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
+          "recordAudioAndroid": true,
+          "recordAudioIOS": true,
+          "cameraPermission": true,
+          "microphonePermission":true,
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 76
@@ -40,5 +61,6 @@
       "typedRoutes": true,
       "reactCompiler": true
     }
+    
   }
 }

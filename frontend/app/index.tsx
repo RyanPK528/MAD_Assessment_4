@@ -1,35 +1,36 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Layout, MaxContentWidth, SpacingScale } from '@/constants/theme';
+import { useUiStyles } from '@/hooks/use-ui-styles';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const ui = useUiStyles();
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView style={ui.screen}>
       <SafeAreaView style={styles.safeArea}>
-        <ThemedText type="title" style={styles.title}>
-          STEMM Lab
-        </ThemedText>
-        <ThemedText type="subtitle" style={styles.subtitle}>
-          A mobile science lab experience for students in the Expo managed workflow.
-        </ThemedText>
-
-        <View style={styles.actionGrid}>
-          <Pressable onPress={() => router.push('/login')} style={styles.actionButton}>
-            <ThemedText type="subtitle" style={styles.buttonText}>Log In</ThemedText>
-          </Pressable>
-          <Pressable onPress={() => router.push('/signup')} style={styles.actionButtonSecondary}>
-            <ThemedText type="subtitle" style={styles.buttonText}>Sign Up</ThemedText>
-          </Pressable>
+        <View style={styles.hero}>
+          <ThemedText type="display" style={styles.title}>
+            STEMM Lab
+          </ThemedText>
+          <ThemedText type="body" themeColor="textSecondary" style={styles.subtitle}>
+            Transform real-world activities into engaging STEMM learning experiences.
+          </ThemedText>
         </View>
 
-        <ThemedText type="small" style={styles.hintText}>
-          Use STEMM Lab to register, join a group, and track sensor-driven science challenges.
+        <View style={styles.actions}>
+          <AppButton label="Log in" onPress={() => router.push('/login')} />
+          <AppButton label="Create team account" onPress={() => router.push('/signup')} variant="secondary" />
+        </View>
+
+        <ThemedText type="caption" themeColor="textSecondary" style={styles.hint}>
+          Register your team, complete sensor-driven challenges, and climb the leaderboard.
         </ThemedText>
       </SafeAreaView>
     </ThemedView>
@@ -37,53 +38,34 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.four,
-  },
   safeArea: {
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+    paddingHorizontal: Layout.screenPadding,
+    paddingVertical: SpacingScale.xxl,
     maxWidth: MaxContentWidth,
     width: '100%',
+    alignSelf: 'center',
+    gap: Layout.sectionGap,
+  },
+  hero: {
+    gap: SpacingScale.sm,
+    alignItems: 'center',
   },
   title: {
     textAlign: 'center',
-    marginBottom: Spacing.two,
   },
   subtitle: {
     textAlign: 'center',
-    marginBottom: Spacing.four,
+    maxWidth: 360,
   },
-  actionGrid: {
+  actions: {
     width: '100%',
-    gap: Spacing.three,
-    alignItems: 'center',
+    gap: SpacingScale.sm,
   },
-  actionButton: {
-    width: '100%',
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    backgroundColor: '#1B82D1',
-    alignItems: 'center',
-  },
-  actionButtonSecondary: {
-    width: '100%',
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
-    backgroundColor: '#2F2F3D',
-    alignItems: 'center',
-  },
-  hintText: {
-    marginTop: Spacing.four,
+  hint: {
     textAlign: 'center',
-    maxWidth: 480,
-  },
-  buttonText: {
-    color: '#FFF',
+    maxWidth: 400,
+    alignSelf: 'center',
   },
 });

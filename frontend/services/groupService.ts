@@ -1,118 +1,131 @@
-import { doc, setDoc, getDoc, query, collection, where, getDocs, getDocFromServer, updateDoc } from 'firebase/firestore';
-import { firebaseFirestore } from '../config/firebaseNative';
-
-const GROUPS_COLLECTION = 'groups';
-const USERS_COLLECTION = 'users';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  runTransaction,
+  serverTimestamp,
+  where,
+} from 'firebase/firestore';
+import { getFirebaseFirestore } from '../config/firebaseNative';
+import { createUniqueTeamDiscriminatorId } from '../utils/groupDiscriminator';
+import { TeamAccountProfile } from './authService';
 
 export interface GroupDocument {
   id: string;
   name: string;
-  gradeLevel: number;
-  createdBy: string;
-  createdAt: string;
-  memberCount: number;
+  grade: number;
+  teamDiscriminatorId: string;
+  memberIds: string[];
+  createdAt: any;
+  completedActivitiesCount: number;
+  lastProgressUpdatedAt: any;
 }
 
-export async function createGroup(groupName: string, gradeLevel: number, userId: string): Promise<GroupDocument> {
-  // eslint-disable-next-line no-console
-  console.log('[GroupService] Creating new group:', groupName, 'grade:', gradeLevel);
+const GROUPS_COLLECTION = 'groups';
+const USERS_COLLECTION = 'users';
 
-  const groupRef = doc(collection(firebaseFirestore, GROUPS_COLLECTION));
-  const groupDocument: GroupDocument = {
-    id: groupRef.id,
-    name: groupName,
-    gradeLevel,
-    createdBy: userId,
-    createdAt: new Date().toISOString(),
-    memberCount: 1,
+export async function fetchGroupForUser(uid: string): Promise<GroupDocument | null> {
+  if (!uid) return null;
+
+  const firestore = getFirebaseFirestore();
+  const userSnap = await getDoc(doc(firestore, USERS_COLLECTION, uid));
+  if (!userSnap.exists()) return null;
+
+  const groupId = String(userSnap.data().groupId ?? '');
+  if (!groupId) return null;
+
+  const groupSnap = await getDoc(doc(firestore, GROUPS_COLLECTION, groupId));
+  if (!groupSnap.exists()) return null;
+
+  const data = groupSnap.data();
+  return {
+    id: groupSnap.id,
+    name: String(data.name ?? 'Unnamed Group'),
+    grade: Number(data.grade ?? 0),
+    teamDiscriminatorId: String(data.teamDiscriminatorId ?? ''),
+    memberIds: Array.isArray(data.memberIds) ? data.memberIds.map(String) : [],
+    createdAt: data.createdAt,
+    completedActivitiesCount: Number(data.completedActivitiesCount ?? 0),
+    lastProgressUpdatedAt: data.lastProgressUpdatedAt,
   };
-
-  try {
-    await setDoc(groupRef, groupDocument);
-    
-    // Update user's groupId
-    const userRef = doc(firebaseFirestore, USERS_COLLECTION, userId);
-    await updateDoc(userRef, { groupId: groupRef.id });
-    
-    // eslint-disable-next-line no-console
-    console.log('[GroupService] Group created successfully:', groupRef.id);
-    return groupDocument;
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[GroupService] Error creating group:', error instanceof Error ? error.message : error);
-    throw error;
-  }
 }
 
-export async function joinGroup(groupId: string, userId: string): Promise<GroupDocument> {
-  // eslint-disable-next-line no-console
-  console.log('[GroupService] Joining group:', groupId);
-
-  try {
-    const groupRef = doc(firebaseFirestore, GROUPS_COLLECTION, groupId);
-    let groupSnapshot;
-
-    try {
-      groupSnapshot = await getDocFromServer(groupRef);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[GroupService] getDocFromServer failed, falling back to cache');
-      groupSnapshot = await getDoc(groupRef);
-    }
-
-    if (!groupSnapshot.exists()) {
-      throw new Error('Group not found.');
-    }
-
-    const groupData = groupSnapshot.data() as GroupDocument;
-
-    // Update user's groupId
-    const userRef = doc(firebaseFirestore, USERS_COLLECTION, userId);
-    await updateDoc(userRef, { groupId: groupId });
-
-    // Increment member count
-    await updateDoc(groupRef, { memberCount: (groupData.memberCount || 0) + 1 });
-
-    // eslint-disable-next-line no-console
-    console.log('[GroupService] Successfully joined group:', groupId);
-    return groupData;
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[GroupService] Error joining group:', error instanceof Error ? error.message : error);
-    throw error;
+export async function createGroup(name: string, creator: TeamAccountProfile): Promise<GroupDocument> {
+  if (!name.trim()) {
+    throw new Error('Group name cannot be empty.');
   }
-}
-
-export async function fetchAvailableGroups(gradeLevel: number): Promise<GroupDocument[]> {
-  // eslint-disable-next-line no-console
-  console.log('[GroupService] Fetching available groups for grade:', gradeLevel);
 
   try {
-    const q = query(
-      collection(firebaseFirestore, GROUPS_COLLECTION),
-      where('gradeLevel', '==', gradeLevel),
-    );
+    const firestore = getFirebaseFirestore();
+    const teamDiscriminatorId = await createUniqueTeamDiscriminatorId();
+    const groupRef = doc(collection(firestore, GROUPS_COLLECTION));
+    const newGroup: Omit<GroupDocument, 'id'> = {
+      name: name.trim(),
+      grade: creator.grade,
+      teamDiscriminatorId,
+      memberIds: [creator.uid],
+      createdAt: serverTimestamp() as any,
+      completedActivitiesCount: 0,
+      lastProgressUpdatedAt: serverTimestamp() as any,
+    };
 
-    let snapshot;
-    try {
-      snapshot = await getDocs(q);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[GroupService] Query failed:', e instanceof Error ? e.message : e);
-      snapshot = await getDocs(q);
-    }
-
-    const groups: GroupDocument[] = [];
-    snapshot.forEach((doc) => {
-      groups.push(doc.data() as GroupDocument);
+    await runTransaction(firestore, async (transaction) => {
+      transaction.set(groupRef, newGroup);
+      const userRef = doc(firestore, USERS_COLLECTION, creator.uid);
+      transaction.update(userRef, { groupId: groupRef.id });
     });
 
-    // eslint-disable-next-line no-console
-    console.log('[GroupService] Found', groups.length, 'groups');
-    return groups;
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('[GroupService] Error fetching groups:', error instanceof Error ? error.message : error);
-    throw error;
+    return {
+      id: groupRef.id,
+      ...newGroup,
+    } as GroupDocument;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unable to create group.';
+    throw new Error(`Create group failed: ${message}`);
+  }
+}
+
+export async function joinGroup(teamCode: string, user: TeamAccountProfile): Promise<GroupDocument> {
+  const normalizedCode = teamCode.trim().toUpperCase();
+
+  if (normalizedCode.length !== 6) {
+    throw new Error('Please provide a valid 6-character group code.');
+  }
+
+  try {
+    const firestore = getFirebaseFirestore();
+    const groupsRef = collection(firestore, GROUPS_COLLECTION);
+    const groupQuery = query(groupsRef, where('teamDiscriminatorId', '==', normalizedCode));
+    const snapshot = await getDocs(groupQuery);
+
+    if (snapshot.empty) {
+      throw new Error('Group code not found. Please verify the code and try again.');
+    }
+
+    const groupDoc = snapshot.docs[0];
+    const groupRef = doc(firestore, GROUPS_COLLECTION, groupDoc.id);
+
+    await runTransaction(firestore, async (transaction) => {
+      const currentGroup = await transaction.get(groupRef);
+      if (!currentGroup.exists()) throw new Error('Group no longer exists.');
+
+      const groupData = currentGroup.data() as GroupDocument;
+      if (groupData.grade !== user.grade) {
+        throw new Error(`Grade mismatch: this team is for grade ${groupData.grade}.`);
+      }
+
+      const memberIds = new Set<string>(groupData.memberIds);
+      memberIds.add(user.uid);
+
+      transaction.update(groupRef, { memberIds: Array.from(memberIds), lastProgressUpdatedAt: serverTimestamp() });
+      transaction.update(doc(firestore, USERS_COLLECTION, user.uid), { groupId: groupRef.id });
+    });
+
+    return { id: groupRef.id, ...groupDoc.data() } as GroupDocument;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unable to join group.';
+    throw new Error(`Join group failed: ${message}`);
   }
 }
