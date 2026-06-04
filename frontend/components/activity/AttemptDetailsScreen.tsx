@@ -74,6 +74,32 @@ export function AttemptDetailsScreen({ attempt, loading, error, onRetry }: Attem
           <ThemedText type="body">Activity: {activityLabel}</ThemedText>
           <ThemedText type="body">Attempt: {attempt.attemptNumber}</ThemedText>
           <ThemedText type="body">Submitted: {formatAttemptDateTime(attempt.completedAt)}</ThemedText>
+          {attempt.latitude != null && attempt.longitude != null && (
+            <Pressable
+              onPress={() => {
+                const url = `https://www.google.com/maps?q=${attempt.latitude},${attempt.longitude}`;
+                void import('expo-linking').then(({ openURL }) => openURL(url));
+              }}
+              accessibilityRole="link"
+              accessibilityLabel="Open location in Google Maps"
+              style={[styles.mapContainer, { backgroundColor: theme.backgroundElement, borderColor: theme.border }]}
+            >
+              <View style={styles.mapContent}>
+                <View style={styles.mapPinCircle}>
+                  <ThemedText style={styles.mapPinEmoji}>📍</ThemedText>
+                </View>
+                <View style={styles.mapTextGroup}>
+                  <ThemedText type="captionBold">Location Tagged</ThemedText>
+                  <ThemedText type="caption" themeColor="textSecondary">
+                    {attempt.latitude!.toFixed(5)}, {attempt.longitude!.toFixed(5)}
+                  </ThemedText>
+                </View>
+                <ThemedText type="caption" themeColor="accent">
+                  View ›
+                </ThemedText>
+              </View>
+            </Pressable>
+          )}
         </ActivitySection>
 
         <ResultsRenderer attempt={attempt} />
@@ -113,5 +139,37 @@ const styles = StyleSheet.create({
     paddingTop: SpacingScale.md,
     paddingBottom: SpacingScale.huge,
     gap: SpacingScale.xs,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SpacingScale.xxs,
+  },
+  mapContainer: {
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    marginTop: SpacingScale.xs,
+    overflow: 'hidden',
+  },
+  mapContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SpacingScale.sm,
+    gap: SpacingScale.sm,
+  },
+  mapPinCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(234, 67, 53, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapPinEmoji: {
+    fontSize: 20,
+  },
+  mapTextGroup: {
+    flex: 1,
+    gap: 2,
   },
 });
