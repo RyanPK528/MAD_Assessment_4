@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
+import { ActivityChoiceChip } from '@/components/activity/ActivityChoiceChip';
 import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
 import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
 import { ActivitySection } from '@/components/activity/ActivitySection';
 import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissionPanel';
 import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
+import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { SpacingScale } from '@/constants/theme';
+import { useActivityStyles } from '@/hooks/use-activity-styles';
 import { useActivitySubmission } from '@/hooks/useActivitySubmission';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -18,12 +22,12 @@ import {
   SoundPollutionState,
   SoundPrediction,
 } from '@/services/soundPollutionService';
-import { SpacingScale } from '@/constants/theme';
 
-const DEFAULT_ACTIONS = ['Drop book on table', 'Talk loudly', 'Stamp feet'];
+const DEFAULT_ACTIONS = ['Drop book on table', 'Talking', 'Stamp feet'];
 
 export default function SoundPollutionScreen() {
   const theme = useTheme();
+  const activityStyles = useActivityStyles();
   const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<SoundPollutionState>({
@@ -85,89 +89,103 @@ export default function SoundPollutionScreen() {
     <ThemedView style={styles.container}>
       {!state.permissionsGranted && (
         <ActivitySection title="Permissions">
-          <Button title="Grant permissions" onPress={() => controller.requestPermissions()} />
+          <AppButton label="Grant permissions" onPress={() => controller.requestPermissions()} />
         </ActivitySection>
       )}
 
-      <ActivitySection title="Live Sound Level">
+      <ActivitySection title="Live sound level">
         <ThemedText type="title" style={{ color: gaugeColor, fontSize: 48 }}>
           {state.isMetering ? state.currentDb : '—'} dB
         </ThemedText>
         <ThemedText type="body">Peak: {state.peakDb} dB</ThemedText>
         {state.location && (
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+          <ThemedText type="small" themeColor="textSecondary">
             GPS: {state.location.latitude.toFixed(4)}, {state.location.longitude.toFixed(4)}
           </ThemedText>
         )}
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {state.message}
+        </ThemedText>
         <View style={styles.buttonRow}>
           {!state.isMetering ? (
-            <Button title="Start metering" onPress={() => controller.startMetering()} disabled={!state.permissionsGranted} />
+            <AppButton
+              label="Start metering"
+              onPress={() => controller.startMetering()}
+              disabled={!state.permissionsGranted}
+            />
           ) : (
-            <Button title="Stop metering" onPress={() => controller.stopMetering()} />
+            <AppButton label="Stop metering" onPress={() => controller.stopMetering()} variant="outline" />
           )}
         </View>
       </ActivitySection>
 
-      <ActivitySection title="Log Action">
-      <View style={styles.chipRow}>
-        {DEFAULT_ACTIONS.map((a) => (
-          <Pressable key={a} onPress={() => setActionLabel(a)} style={[styles.chip, { borderColor: theme.border, backgroundColor: actionLabel === a ? theme.accent : theme.backgroundElement }]}>
-            <ThemedText type="small" style={{ color: actionLabel === a ? '#fff' : theme.textPrimary }}>{a}</ThemedText>
-          </Pressable>
-        ))}
-      </View>
-      <TextInput
-        value={actionLabel}
-        onChangeText={setActionLabel}
-        placeholder="Action label"
-        placeholderTextColor={theme.textSecondary}
-        style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
-      />
-      <ThemedText type="small">Prediction vs previous</ThemedText>
-      <View style={styles.segmentRow}>
-        {(['louder', 'softer', 'same'] as SoundPrediction[]).map((p) => (
-          <Pressable key={p} onPress={() => setPrediction(p)} style={[styles.segment, { backgroundColor: prediction === p ? theme.accent : theme.backgroundElement, borderColor: theme.border }]}>
-            <ThemedText type="small" style={{ color: prediction === p ? '#fff' : theme.textPrimary }}>{p}</ThemedText>
-          </Pressable>
-        ))}
-      </View>
-      <Button
-        title="Log this action"
-        onPress={() => controller.logAction(actionLabel, prediction)}
-        disabled={state.actions.length >= 10}
-      />
+      <ActivitySection title="Log action">
+        <View style={styles.chipRow}>
+          {DEFAULT_ACTIONS.map((a) => (
+            <ActivityChoiceChip
+              key={a}
+              label={a}
+              selected={actionLabel === a}
+              onPress={() => setActionLabel(a)}
+            />
+          ))}
+        </View>
+        <TextInput
+          value={actionLabel}
+          onChangeText={setActionLabel}
+          placeholder="Action label"
+          placeholderTextColor={theme.textSecondary}
+          style={activityStyles.input}
+        />
+        <ThemedText type="small" themeColor="textSecondary">
+          Prediction vs previous
+        </ThemedText>
+        <View style={styles.chipRow}>
+          {(['louder', 'softer', 'same'] as SoundPrediction[]).map((p) => (
+            <ActivityChoiceChip
+              key={p}
+              label={p}
+              selected={prediction === p}
+              onPress={() => setPrediction(p)}
+            />
+          ))}
+        </View>
+        <AppButton
+          label="Log this action"
+          onPress={() => controller.logAction(actionLabel, prediction)}
+          disabled={state.actions.length >= 10}
+        />
       </ActivitySection>
 
       {state.actions.length > 0 && (
         <>
-          <ActivitySection title="Recorded Actions">
-          <TrialResultsTable
-            predictionHeader="Predicted"
-            outcomeHeader="Measured (dB)"
-            rows={state.actions.map((a) => ({
-              label: a.label,
-              prediction: a.prediction,
-              outcome: `${a.measuredDb} dB — ${getRiskLabel(a.riskLevel)}`,
-            }))}
-          />
+          <ActivitySection title="Recorded actions">
+            <TrialResultsTable
+              predictionHeader="Predicted"
+              outcomeHeader="Measured (dB)"
+              rows={state.actions.map((a) => ({
+                label: a.label,
+                prediction: a.prediction,
+                outcome: `${a.measuredDb} dB — ${getRiskLabel(a.riskLevel)}`,
+              }))}
+            />
           </ActivitySection>
-          <ActivitySection title="Zone Map">
-          {state.actions.map((a, i) => (
-            <ThemedText key={i} type="small" style={{ color: theme.textSecondary }}>
-              {a.label}: {a.measuredDb} dB @ {a.latitude?.toFixed(3) ?? '?'}, {a.longitude?.toFixed(3) ?? '?'}
-            </ThemedText>
-          ))}
+          <ActivitySection title="Zone map">
+            {state.actions.map((a, i) => (
+              <ThemedText key={i} type="small" themeColor="textSecondary">
+                {a.label}: {a.measuredDb} dB @ {a.latitude?.toFixed(3) ?? '?'}, {a.longitude?.toFixed(3) ?? '?'}
+              </ThemedText>
+            ))}
           </ActivitySection>
         </>
       )}
 
       <ActivitySection title="Submit">
-      <Button
-        title="Submit attempt"
-        onPress={handleSubmit}
-        disabled={!submission.canSubmit || state.actions.length === 0}
-      />
+        <AppButton
+          label="Submit attempt"
+          onPress={handleSubmit}
+          disabled={!submission.canSubmit || state.actions.length === 0}
+        />
       </ActivitySection>
     </ThemedView>
   );
@@ -201,9 +219,5 @@ export default function SoundPollutionScreen() {
 const styles = StyleSheet.create({
   container: { gap: SpacingScale.xs },
   buttonRow: { marginTop: SpacingScale.sm },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SpacingScale.sm },
-  chip: { padding: SpacingScale.sm, borderRadius: SpacingScale.sm, borderWidth: 1 },
-  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
-  segmentRow: { flexDirection: 'row', gap: SpacingScale.sm },
-  segment: { padding: SpacingScale.sm, borderRadius: SpacingScale.sm, borderWidth: 1, flex: 1, alignItems: 'center' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SpacingScale.sm },
 });

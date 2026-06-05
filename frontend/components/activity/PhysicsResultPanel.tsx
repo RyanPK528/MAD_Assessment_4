@@ -1,8 +1,8 @@
 import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
+import { Layout, Radii, SpacingScale, getShadowStyle } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/constants/theme';
 
 export interface PhysicsValues {
   impactSpeedMs?: number | null;
@@ -49,11 +49,19 @@ export function PhysicsResultPanel({ values, gForceRiskLabel }: PhysicsResultPan
   ];
 
   return (
-    <View style={[styles.panel, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+    <View
+      style={[
+        styles.panel,
+        {
+          borderColor: theme.border,
+          backgroundColor: theme.surface,
+          ...getShadowStyle('sm', theme.shadow),
+        },
+      ]}>
       <ThemedText type="subtitle">Physics results</ThemedText>
       {rows.map((row) => (
         <View key={row.label} style={styles.row}>
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+          <ThemedText type="small" themeColor="textSecondary">
             {row.label}
           </ThemedText>
           <ThemedText type="body">
@@ -62,7 +70,7 @@ export function PhysicsResultPanel({ values, gForceRiskLabel }: PhysicsResultPan
         </View>
       ))}
       {values.gForce !== null && values.gForce !== undefined && (
-        <ThemedText type="small" style={{ color: theme.accent, marginTop: Spacing.two }}>
+        <ThemedText type="small" style={{ color: theme.accent, marginTop: SpacingScale.xs }}>
           Risk: {risk}
         </ThemedText>
       )}
@@ -72,10 +80,10 @@ export function PhysicsResultPanel({ values, gForceRiskLabel }: PhysicsResultPan
 
 const styles = StyleSheet.create({
   panel: {
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
+    padding: Layout.cardPadding,
+    borderRadius: Radii.xl,
     borderWidth: 1,
-    gap: Spacing.two,
+    gap: SpacingScale.sm,
   },
   row: {
     flexDirection: 'row',

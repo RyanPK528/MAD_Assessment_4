@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
+import { ActivityChoiceChip } from '@/components/activity/ActivityChoiceChip';
 import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
 import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
 import { ActivitySection } from '@/components/activity/ActivitySection';
@@ -8,23 +9,24 @@ import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissio
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
 import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
+import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { SpacingScale } from '@/constants/theme';
+import { useActivityStyles } from '@/hooks/use-activity-styles';
 import { useActivitySubmission } from '@/hooks/useActivitySubmission';
-import { useTheme } from '@/hooks/use-theme';
 import {
   createHandFanController,
   FanDistanceCm,
   FanMaterial,
   HandFanState,
 } from '@/services/handFanService';
-import { SpacingScale } from '@/constants/theme';
 
 const DISTANCES: FanDistanceCm[] = [15, 30, 45];
 
 export default function HandFanScreen() {
-  const theme = useTheme();
+  const activityStyles = useActivityStyles();
   const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<HandFanState>({
@@ -75,91 +77,99 @@ export default function HandFanScreen() {
   const activityContent = (
     <ThemedView style={styles.container}>
       <ActivitySection title="Material">
-      <View style={styles.segmentRow}>
-        {(['paper', 'cardboard'] as FanMaterial[]).map((m) => (
-          <Pressable
-            key={m}
-            onPress={() => controller.setMaterial(m)}
-            style={[styles.segment, { backgroundColor: state.material === m ? theme.accent : theme.backgroundElement, borderColor: theme.border }]}
-          >
-            <ThemedText type="smallBold" style={{ color: state.material === m ? '#fff' : theme.textPrimary }}>{m}</ThemedText>
-          </Pressable>
-        ))}
-      </View>
+        <View style={styles.chipRow}>
+          {(['paper', 'cardboard'] as FanMaterial[]).map((m) => (
+            <ActivityChoiceChip
+              key={m}
+              label={m}
+              selected={state.material === m}
+              onPress={() => controller.setMaterial(m)}
+            />
+          ))}
+        </View>
       </ActivitySection>
 
-      <ActivitySection title="Fan Distance">
-      <View style={styles.segmentRow}>
-        {DISTANCES.map((d) => (
-          <Pressable
-            key={d}
-            onPress={() => controller.setDistance(d)}
-            style={[styles.segment, { backgroundColor: state.distanceCm === d ? theme.accent : theme.backgroundElement, borderColor: theme.border }]}
-          >
-            <ThemedText type="smallBold" style={{ color: state.distanceCm === d ? '#fff' : theme.textPrimary }}>{d} cm</ThemedText>
-          </Pressable>
-        ))}
-      </View>
+      <ActivitySection title="Fan distance">
+        <View style={styles.chipRow}>
+          {DISTANCES.map((d) => (
+            <ActivityChoiceChip
+              key={d}
+              label={`${d} cm`}
+              selected={state.distanceCm === d}
+              onPress={() => controller.setDistance(d)}
+            />
+          ))}
+        </View>
       </ActivitySection>
 
-      <ActivitySection title="Fan Intensity">
-        <ThemedText type="title">{state.phase === 'fanning' ? state.liveIntensity.toFixed(1) : state.fanIntensity.toFixed(1)}</ThemedText>
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
+      <ActivitySection title="Fan intensity">
+        <ThemedText type="title">
+          {state.phase === 'fanning' ? state.liveIntensity.toFixed(1) : state.fanIntensity.toFixed(1)}
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {state.message}
+        </ThemedText>
         <View style={styles.buttonRow}>
           {state.phase !== 'fanning' ? (
-            <Button title="Start fanning" onPress={() => controller.startFanTracking()} />
+            <AppButton label="Start fanning" onPress={() => controller.startFanTracking()} />
           ) : (
-            <Button title="Stop & record" onPress={() => controller.stopFanTracking()} />
+            <AppButton label="Stop & record" onPress={() => controller.stopFanTracking()} variant="outline" />
           )}
         </View>
       </ActivitySection>
 
-      <ActivitySection title="Design Trial">
-      <DesignTrialCard
-        title={`Design ${state.designs.length + 1} of 3`}
-        label={draft.label}
-        onLabelChange={(v) => setDraft((d) => ({ ...d, label: v }))}
-        prediction={draft.prediction}
-        onPredictionChange={(v) => setDraft((d) => ({ ...d, prediction: v }))}
-        notes={draft.notes}
-        onNotesChange={(v) => setDraft((d) => ({ ...d, notes: v }))}
-      >
-        <ThemedText type="small">Bend angle (degrees)</ThemedText>
-        <TextInput
-          value={bendInput}
-          onChangeText={(v) => {
-            setBendInput(v);
-            controller.setBendAngle(Number(v) || 0);
-          }}
-          keyboardType="number-pad"
-          style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
+      <ActivitySection title="Design trial">
+        <DesignTrialCard
+          title={`Design ${state.designs.length + 1} of 3`}
+          label={draft.label}
+          onLabelChange={(v) => setDraft((d) => ({ ...d, label: v }))}
+          prediction={draft.prediction}
+          onPredictionChange={(v) => setDraft((d) => ({ ...d, prediction: v }))}
+          notes={draft.notes}
+          onNotesChange={(v) => setDraft((d) => ({ ...d, notes: v }))}
+        >
+          <ThemedText type="small" themeColor="textSecondary">
+            Bend angle (degrees)
+          </ThemedText>
+          <TextInput
+            value={bendInput}
+            onChangeText={(v) => {
+              setBendInput(v);
+              controller.setBendAngle(Number(v) || 0);
+            }}
+            keyboardType="number-pad"
+            style={activityStyles.input}
+          />
+          <ThemedText type="small" themeColor="textSecondary">
+            Stiffness k = {state.stiffnessK} N/rad • Est. force ≈{' '}
+            {(state.stiffnessK * ((Number(bendInput) || 0) * Math.PI) / 180).toFixed(3)} N
+          </ThemedText>
+        </DesignTrialCard>
+        <AppButton
+          label="Save design"
+          onPress={() => controller.saveDesign()}
+          disabled={state.phase === 'fanning'}
         />
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>
-          Stiffness k = {state.stiffnessK} N/rad • Est. force ≈{' '}
-          {(state.stiffnessK * ((Number(bendInput) || 0) * Math.PI) / 180).toFixed(3)} N
-        </ThemedText>
-      </DesignTrialCard>
-      <Button title="Save design" onPress={() => controller.saveDesign()} disabled={state.phase === 'fanning'} />
       </ActivitySection>
 
       {state.designs.length > 0 && (
         <ActivitySection title="Results">
-        <TrialResultsTable
-          rows={state.designs.map((d) => ({
-            label: d.label,
-            prediction: d.prediction,
-            outcome: `${d.bendAngleDeg}° bend, ${d.estimatedForceN} N @ ${d.distanceCm}cm`,
-          }))}
-        />
+          <TrialResultsTable
+            rows={state.designs.map((d) => ({
+              label: d.label,
+              prediction: d.prediction,
+              outcome: `${d.bendAngleDeg}° bend, ${d.estimatedForceN} N @ ${d.distanceCm}cm`,
+            }))}
+          />
         </ActivitySection>
       )}
 
       <ActivitySection title="Submit">
-      <Button
-        title="Submit attempt"
-        onPress={handleSubmit}
-        disabled={!submission.canSubmit || state.designs.length === 0}
-      />
+        <AppButton
+          label="Submit attempt"
+          onPress={handleSubmit}
+          disabled={!submission.canSubmit || state.designs.length === 0}
+        />
       </ActivitySection>
     </ThemedView>
   );
@@ -190,8 +200,6 @@ export default function HandFanScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: SpacingScale.xs },
-  segmentRow: { flexDirection: 'row', gap: SpacingScale.sm, flexWrap: 'wrap' },
-  segment: { paddingVertical: SpacingScale.sm, paddingHorizontal: SpacingScale.md, borderRadius: SpacingScale.sm, borderWidth: 1 },
+  chipRow: { flexDirection: 'row', gap: SpacingScale.sm, flexWrap: 'wrap' },
   buttonRow: { marginTop: SpacingScale.sm },
-  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
 });

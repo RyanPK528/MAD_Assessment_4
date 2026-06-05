@@ -1,34 +1,36 @@
-import { CameraView, useCameraPermissions,useMicrophonePermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
+import { ActivityChoiceChip } from '@/components/activity/ActivityChoiceChip';
 import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
 import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
 import { ActivitySection } from '@/components/activity/ActivitySection';
 import { ActivitySectionHeading } from '@/components/activity/ActivitySectionHeading';
-import {
-  ActivitySubmissionPanel,
-} from '@/components/activity/ActivitySubmissionPanel';
+import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissionPanel';
 import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
 import { PhysicsResultPanel } from '@/components/activity/PhysicsResultPanel';
 import { SessionTimer } from '@/components/activity/SessionTimer';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
+import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { useTheme } from '@/hooks/use-theme';
 import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { SpacingScale } from '@/constants/theme';
+import { useActivityStyles } from '@/hooks/use-activity-styles';
 import { useActivitySubmission } from '@/hooks/useActivitySubmission';
+import { useTheme } from '@/hooks/use-theme';
 import {
   createEmptyTrial,
   createParachuteDropController,
   ParachuteDropState,
   SESSION_MAX_SEC,
 } from '@/services/parachuteDropService';
-import { SpacingScale } from '@/constants/theme';
 
 export default function ParachuteDropScreen() {
   const theme = useTheme();
+  const activityStyles = useActivityStyles();
   const [state, setState] = useState<ParachuteDropState>({
     phase: 'setup',
     dropHeightM: 1.0,
@@ -81,56 +83,47 @@ export default function ParachuteDropScreen() {
   const activeTrial = state.trials[state.activeTrialIndex];
 
   const handleRecordVideo = async () => {
-    // 2. Use the variables returned by the hooks inside your function
-    
-    // Check and request camera permission
     let camStatus = permission;
     if (!camStatus?.granted) {
       camStatus = await requestPermission();
     }
-    
-    // Check and request microphone permission
+
     let micStatus = micPermission;
     if (!micStatus?.granted) {
       micStatus = await requestMicPermission();
     }
 
-    // Only show camera if BOTH are granted
     if (camStatus?.granted && micStatus?.granted) {
       setShowCamera(true);
     }
   };
+
   const handleStartRecording = async () => {
-    // Prevent starting if already recording or camera isn't ready
     if (!cameraRef.current || isRecording) return;
-    
+
     try {
-      setIsRecording(true); 
-      console.log("Attempting to start recording...");
-      
+      setIsRecording(true);
+      console.log('Attempting to start recording...');
+
       const video = await cameraRef.current.recordAsync({ maxDuration: 30 });
-      
-      console.log("Recording finished successfully:", video?.uri);
+
+      console.log('Recording finished successfully:', video?.uri);
       if (video?.uri) {
         controller.setVideoUri(video.uri);
       }
     } catch (error) {
-      console.error("ACTUAL NATIVE ERROR:", error); 
+      console.error('ACTUAL NATIVE ERROR:', error);
     } finally {
-      setIsRecording(false); 
-      // 🚨 Safely close the camera ONLY after the video is fully saved or cancelled
-      setShowCamera(false); 
+      setIsRecording(false);
+      setShowCamera(false);
     }
   };
 
   const handleStopVideo = () => {
     if (cameraRef.current && isRecording) {
-      console.log("Stopping recording...");
-      // Tell the camera to stop. DO NOT close the camera here. 
-      // The handleStartRecording function above will close it when the file is ready.
+      console.log('Stopping recording...');
       cameraRef.current.stopRecording();
     } else {
-      // If they haven't started recording yet, it's safe to just close the camera
       setShowCamera(false);
     }
   };
@@ -144,33 +137,34 @@ export default function ParachuteDropScreen() {
     });
   };
 
- if (showCamera && permission?.granted) {
+  if (showCamera && permission?.granted) {
     return (
       <View style={styles.cameraContainer}>
         <CameraView ref={cameraRef} style={styles.camera} mode="video" facing="back" />
-        
+
         <View style={styles.cameraControls}>
-          {/* This makes the button react to the state we created */}
-          <Button 
-            title={isRecording ? "Recording..." : "Start recording"} 
-            onPress={handleStartRecording} 
-            disabled={isRecording} 
+          <AppButton
+            label={isRecording ? 'Recording…' : 'Start recording'}
+            onPress={handleStartRecording}
+            disabled={isRecording}
+            fullWidth={false}
           />
-          
-          <Button 
-            title={isRecording ? "Stop & Save" : "Cancel & Close"} 
-            onPress={handleStopVideo} 
+          <AppButton
+            label={isRecording ? 'Stop & save' : 'Cancel & close'}
+            onPress={handleStopVideo}
+            variant="outline"
+            fullWidth={false}
           />
         </View>
       </View>
     );
   }
-  
+
   const overviewContent = <ActivityOverviewPanel activityId="parachute-drop" />;
 
   const activityContent = (
-      <ThemedView style={styles.container}>
-        <ActivitySection title="Design Session">
+    <ThemedView style={styles.container}>
+      <ActivitySection title="Design session">
         <SessionTimer
           elapsedSec={state.sessionTimerSec}
           maxSec={SESSION_MAX_SEC}
@@ -180,42 +174,46 @@ export default function ParachuteDropScreen() {
           onReset={() => controller.resetSessionTimer()}
           label="20-minute design session"
         />
-        </ActivitySection>
+      </ActivitySection>
 
-        <ActivitySection title="Setup">
-          <ThemedText type="small">Drop height (m)</ThemedText>
-          <TextInput
-            value={heightInput}
-            onChangeText={(v) => {
-              setHeightInput(v);
-              controller.setDropHeight(Number(v) || 0);
-            }}
-            keyboardType="decimal-pad"
-            style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
-          />
-          <ThemedText type="small">Toy mass (kg)</ThemedText>
-          <TextInput
-            value={massInput}
-            onChangeText={(v) => {
-              setMassInput(v);
-              controller.setMass(Number(v) || 0);
-            }}
-            keyboardType="decimal-pad"
-            style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
-          />
-          <Button title="Begin trials" onPress={() => controller.setPhase('recording')} />
-        </ActivitySection>
+      <ActivitySection title="Setup">
+        <ThemedText type="small" themeColor="textSecondary">
+          Drop height (m)
+        </ThemedText>
+        <TextInput
+          value={heightInput}
+          onChangeText={(v) => {
+            setHeightInput(v);
+            controller.setDropHeight(Number(v) || 0);
+          }}
+          keyboardType="decimal-pad"
+          style={activityStyles.input}
+        />
+        <ThemedText type="small" themeColor="textSecondary">
+          Toy mass (kg)
+        </ThemedText>
+        <TextInput
+          value={massInput}
+          onChangeText={(v) => {
+            setMassInput(v);
+            controller.setMass(Number(v) || 0);
+          }}
+          keyboardType="decimal-pad"
+          style={activityStyles.input}
+        />
+        <AppButton label="Begin trials" onPress={() => controller.setPhase('recording')} />
+      </ActivitySection>
 
-        {state.phase !== 'setup' && activeTrial && (
-          <>
-            <ActivitySection title="Prototype Trials">
+      {state.phase !== 'setup' && activeTrial && (
+        <>
+          <ActivitySection title="Prototype trials">
             <View style={styles.trialTabs}>
               {[0, 1, 2].map((i) => (
-                <Button
+                <ActivityChoiceChip
                   key={i}
-                  title={`Trial ${i + 1}`}
+                  label={`Trial ${i + 1}`}
+                  selected={state.activeTrialIndex === i}
                   onPress={() => controller.setActiveTrial(i)}
-                  color={state.activeTrialIndex === i ? theme.accent : undefined}
                 />
               ))}
             </View>
@@ -229,18 +227,23 @@ export default function ParachuteDropScreen() {
             />
 
             <ActivitySectionHeading title="Drop timer" />
-              <ThemedText type="title">
-                {state.dropTimerRunning ? state.dropTimerSec.toFixed(3) : activeTrial.fallTimeSec?.toFixed(3) ?? '0.000'} s
-              </ThemedText>
-              <View style={styles.buttonRow}>
-                {!state.dropTimerRunning ? (
-                  <Button title="Start drop" onPress={() => controller.startDropTimer()} />
-                ) : (
-                  <Button title="Toy hit ground — stop" onPress={() => controller.stopDropTimer()} />
-                )}
-              </View>
+            <ThemedText type="title">
+              {state.dropTimerRunning
+                ? state.dropTimerSec.toFixed(3)
+                : activeTrial.fallTimeSec?.toFixed(3) ?? '0.000'}{' '}
+              s
+            </ThemedText>
+            <View style={styles.buttonRow}>
+              {!state.dropTimerRunning ? (
+                <AppButton label="Start drop" onPress={() => controller.startDropTimer()} />
+              ) : (
+                <AppButton label="Toy hit ground — stop" onPress={() => controller.stopDropTimer()} />
+              )}
+            </View>
 
-            <ThemedText type="small">Contact time from slow-motion (s)</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Contact time from slow-motion (s)
+            </ThemedText>
             <TextInput
               value={contactInput}
               onChangeText={(v) => {
@@ -250,13 +253,15 @@ export default function ParachuteDropScreen() {
               keyboardType="decimal-pad"
               placeholder="e.g. 0.05"
               placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
+              style={activityStyles.input}
             />
 
             <View style={styles.buttonRow}>
-              <Button title="Record slow-mo video" onPress={handleRecordVideo} />
+              <AppButton label="Record slow-mo video" onPress={handleRecordVideo} />
               {activeTrial.videoUri && (
-                <ThemedText type="small" style={{ color: theme.success }}>Video saved</ThemedText>
+                <ThemedText type="small" style={{ color: theme.success }}>
+                  Video saved
+                </ThemedText>
               )}
             </View>
 
@@ -269,12 +274,12 @@ export default function ParachuteDropScreen() {
                 gForce: activeTrial.gForce,
               }}
             />
-            </ActivitySection>
-          </>
-        )}
+          </ActivitySection>
+        </>
+      )}
 
-        {state.trials.some((t) => t.fallTimeSec !== null) && (
-          <ActivitySection title="Results Summary">
+      {state.trials.some((t) => t.fallTimeSec !== null) && (
+        <ActivitySection title="Results summary">
           <TrialResultsTable
             rows={state.trials
               .filter((t) => t.fallTimeSec !== null)
@@ -284,18 +289,20 @@ export default function ParachuteDropScreen() {
                 outcome: `${t.fallTimeSec?.toFixed(3)} s fall${t.gForce !== null ? `, ${t.gForce.toFixed(1)} g` : ''}`,
               }))}
           />
-          </ActivitySection>
-        )}
+        </ActivitySection>
+      )}
 
-        <ActivitySection title="Submit">
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
-        <Button
-          title="Submit attempt"
+      <ActivitySection title="Submit">
+        <ThemedText type="small" themeColor="textSecondary">
+          {state.message}
+        </ThemedText>
+        <AppButton
+          label="Submit attempt"
           onPress={handleSubmit}
           disabled={!submission.canSubmit || !state.trials.some((t) => t.fallTimeSec !== null)}
         />
-        </ActivitySection>
-      </ThemedView>
+      </ActivitySection>
+    </ThemedView>
   );
 
   const submissionContent = (
@@ -326,10 +333,18 @@ export default function ParachuteDropScreen() {
 
 const styles = StyleSheet.create({
   container: { gap: SpacingScale.xs },
-  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
   buttonRow: { flexDirection: 'row', gap: SpacingScale.sm, alignItems: 'center', flexWrap: 'wrap' },
-  trialTabs: { flexDirection: 'row', gap: SpacingScale.sm },
+  trialTabs: { flexDirection: 'row', gap: SpacingScale.sm, flexWrap: 'wrap' },
   cameraContainer: { flex: 1 },
   camera: { flex: 1 },
-  cameraControls: { position: 'absolute', bottom: 40, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: SpacingScale.md },
+  cameraControls: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SpacingScale.md,
+    paddingHorizontal: SpacingScale.md,
+  },
 });
