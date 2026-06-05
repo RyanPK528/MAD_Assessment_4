@@ -3,7 +3,9 @@ import { useCallback, useState } from 'react';
 import { ActivityId } from '@/constants/activities';
 import { getMaxAttempts } from '@/constants/activityAttemptConfig';
 import { saveActivityAttempt } from '@/services/activityResultService';
+import { requestLocationPermission } from '@/services/locationService';
 import { ActivityAttemptRecord } from '@/types/activityAttempt';
+import * as Location from 'expo-location';
 
 interface UseActivitySubmissionOptions {
   activityId: ActivityId;
@@ -23,8 +25,25 @@ export function useActivitySubmission({ activityId, onSuccess }: UseActivitySubm
   const maxAttempts = getMaxAttempts(activityId);
   const canSubmit = maxAttempts === undefined || attemptCount < maxAttempts;
 
+  /**
+   * Automatically capture GPS when the user initiates submission.
+   * Falls back gracefully if permission is denied.
+   */
+  const captureGps = useCallback(async (): Promise<{ latitude: number; longitude: number } | null> => {
+    try {
+      const granted = await requestLocationPermission();
+      if (!granted) return null;
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+    } catch {
+      return null;
+    }
+  }, []);
+
   const requestSubmit = useCallback(
-    (
+    async (
       data: Record<string, unknown>,
       options?: { location?: { latitude: number; longitude: number } | null },
     ) => {
@@ -34,10 +53,18 @@ export function useActivitySubmission({ activityId, onSuccess }: UseActivitySubm
       }
       setSubmitError(null);
       setPendingData(data);
-      setPendingLocation(options?.location);
+
+      // Auto-capture GPS if not explicitly provided
+      if (options?.location !== undefined) {
+        setPendingLocation(options.location);
+      } else {
+        const gps = await captureGps();
+        setPendingLocation(gps);
+      }
+
       setModalVisible(true);
     },
-    [canSubmit, maxAttempts],
+    [canSubmit, maxAttempts, captureGps],
   );
 
   const cancelSubmit = useCallback(() => {
@@ -70,6 +97,18 @@ export function useActivitySubmission({ activityId, onSuccess }: UseActivitySubm
         setModalVisible(false);
         setPendingData(null);
         setPendingLocation(undefined);
+
+        // Send a local notification confirming submission (safe for Expo Go — falls back to Alert)
+        import('@/services/notificationService').then(({ scheduleLocalNotification }) => {
+          void scheduleLocalNotification(
+            '✅ Activity Submitted!',
+            `Your ${activityId.replace(/-/g, ' ')} attempt #${record.attemptNumber} was saved successfully.`,
+            1,
+          );
+        }).catch(() => {
+          // Notifications unavailable — silent fail
+        });
+
         onSuccess?.(record);
       } catch (err) {
         setSubmitError(err instanceof Error ? err.message : 'Failed to save attempt.');

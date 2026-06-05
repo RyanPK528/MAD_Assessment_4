@@ -26,11 +26,15 @@ export interface EarthquakeState {
 }
 
 const MAX_DESIGNS = 3;
-const GRAVITY = 9.8;
+// expo-sensors Accelerometer reports values in G-units (magnitude ≈ 1.0 at rest)
+const GRAVITY_G = 1.0;
 
-export function aggregateDisplacement(accelMag: number, dtSec: number): number {
-  const displacementM = Math.max(0, (accelMag - GRAVITY) * dtSec * dtSec * 50);
-  return displacementM * 100;
+export function aggregateDisplacement(accelMagG: number, dtSec: number): number {
+  // Subtract resting gravity (1g), convert to m/s², compute displacement in cm
+  const dynamicG = Math.abs(accelMagG - GRAVITY_G);
+  const dynamicMs2 = dynamicG * 9.81;
+  // 0.5 * a * t² gives metres; *100 → cm; *50 → UI scaling factor
+  return 0.5 * dynamicMs2 * dtSec * dtSec * 100 * 50;
 }
 
 export function aggregateRotation(gyroMag: number, dtSec: number): number {
@@ -62,7 +66,9 @@ export function createEarthquakeStructureController(onUpdate: (state: Earthquake
   let hapticInterval: ReturnType<typeof setInterval> | null = null;
   let elapsedInterval: ReturnType<typeof setInterval> | null = null;
   let testTimeout: ReturnType<typeof setTimeout> | null = null;
-  let lastTimestamp = Date.now();
+  // Separate timestamps per sensor to prevent cross-contamination (dt ≈ 0 bug)
+  let lastAccelTime = Date.now();
+  let lastGyroTime = Date.now();
   let draftLabel = '';
   let draftFolds = 4;
   let draftPillars = 4;
@@ -117,7 +123,8 @@ export function createEarthquakeStructureController(onUpdate: (state: Earthquake
     };
     publish();
 
-    lastTimestamp = Date.now();
+    lastAccelTime = Date.now();
+    lastGyroTime = Date.now();
     applySensorThrottle(Accelerometer, true);
     applySensorThrottle(Gyroscope, true);
     Accelerometer.setUpdateInterval(100);
@@ -125,8 +132,10 @@ export function createEarthquakeStructureController(onUpdate: (state: Earthquake
 
     accelSub = Accelerometer.addListener(({ x, y, z }) => {
       const now = Date.now();
-      const dt = (now - lastTimestamp) / 1000;
-      lastTimestamp = now;
+      const dt = (now - lastAccelTime) / 1000;
+      lastAccelTime = now;
+
+      // Magnitude in G-units; subtract 1g (rest gravity) to isolate dynamic acceleration
       const mag = Math.sqrt(x * x + y * y + z * z);
       const delta = aggregateDisplacement(mag, dt);
       const newDisp = state.currentDisplacementCm + delta;
@@ -140,7 +149,9 @@ export function createEarthquakeStructureController(onUpdate: (state: Earthquake
 
     gyroSub = Gyroscope.addListener(({ x, y, z }) => {
       const now = Date.now();
-      const dt = (now - lastTimestamp) / 1000;
+      const dt = (now - lastGyroTime) / 1000;
+      lastGyroTime = now;
+
       const mag = Math.sqrt(x * x + y * y + z * z);
       const delta = aggregateRotation(mag, dt);
       const newRot = state.currentRotationDeg + delta;

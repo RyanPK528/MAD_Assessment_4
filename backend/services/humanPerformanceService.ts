@@ -192,6 +192,7 @@ export function createStretchLabController(onUpdate: (state: StretchLabState) =>
       return;
     }
 
+    resetAttemptMetrics();
     state.countdown = COUNTDOWN_START;
     state.recordingState = 'countdown';
     publish();

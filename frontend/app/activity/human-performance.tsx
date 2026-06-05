@@ -32,6 +32,7 @@ import {
 } from '@/services/humanPerformanceService';
 import { useActivityStyles } from '@/hooks/use-activity-styles';
 import { useTheme } from '@/hooks/use-theme';
+import { isMonitoringPanelVisible } from '@/utils/recordingUi';
 
 export default function HumanPerformanceScreen() {
   const theme = useTheme();
@@ -113,6 +114,8 @@ export default function HumanPerformanceScreen() {
     submission.requestSubmit(buildSubmissionPayload(attempts));
   };
 
+  const usePlaceholderMetrics = labState.recordingState === 'countdown';
+
   const overviewContent = <ActivityOverviewPanel activityId="human-performance" />;
 
   const activityContent = (
@@ -121,23 +124,33 @@ export default function HumanPerformanceScreen() {
         <ThemedText type="body">{currentPhase.instruction}</ThemedText>
         <View style={styles.timerRow}>
           <ThemedText type="small" themeColor="textSecondary">
-            {labState.recordingState === 'recording' || labState.recordingState === 'completed'
-              ? 'Time elapsed'
-              : 'Timer'}
+            {labState.recordingState === 'countdown'
+              ? 'Get ready'
+              : labState.recordingState === 'recording' || labState.recordingState === 'completed'
+                ? 'Time elapsed'
+                : 'Timer'}
           </ThemedText>
           <ThemedText type="title">{formatRecordingTime(labState.elapsedSec)}</ThemedText>
         </View>
+        {labState.recordingState === 'countdown' || labState.recordingState === 'recording' ? (
+          <RecordCircleButton
+            label="Finish"
+            compact
+            disabled={labState.recordingState !== 'recording'}
+            onPress={handleFinishRecording}
+          />
+        ) : null}
       </ActivitySection>
 
       {labState.recordingState === 'idle' && !allPhasesComplete ? (
         <ActivitySection title="Prediction">
           <ThemedText type="small" themeColor="textSecondary">
-            Predict phone vibration sensor reading (absolute), e.g. +/- 5 mm.
+            Predict phone vibration sensor reading (absolute), e.g. +/- 15 mm.
           </ThemedText>
           <TextInput
             value={predictionInput}
             onChangeText={setPredictionInput}
-            placeholder="e.g. 5 mm"
+            placeholder="e.g. 15 mm"
             placeholderTextColor={theme.textSecondary}
             style={activityStyles.input}
           />
@@ -145,24 +158,27 @@ export default function HumanPerformanceScreen() {
         </ActivitySection>
       ) : null}
 
-      {labState.recordingState === 'recording' ? (
-        <RecordCircleButton label="Finish" onPress={handleFinishRecording} />
-      ) : null}
-
-      {labState.recordingState === 'recording' || labState.recordingState === 'completed' ? (
+      {isMonitoringPanelVisible(labState.recordingState) ? (
         <>
           <ActivitySection title="Live Metrics">
             <View style={styles.statsRow}>
-              <StatCard label="Vibrations detected" value={String(labState.vibrationEvents)} />
-              <StatCard label="Smoothness score" value={`${Math.round(labState.smoothnessScore)}%`} />
+              <StatCard
+                label="Vibrations detected"
+                value={String(usePlaceholderMetrics ? 0 : labState.vibrationEvents)}
+              />
+              <StatCard
+                label="Smoothness score"
+                value={`${usePlaceholderMetrics ? 100 : Math.round(labState.smoothnessScore)}%`}
+              />
             </View>
             <ThemedText type="small" themeColor="textSecondary">
-              Largest movement: {deltaToMillimeters(labState.largestDelta)} mm
+              Largest movement:{' '}
+              {usePlaceholderMetrics ? 0 : deltaToMillimeters(labState.largestDelta)} mm
             </ThemedText>
           </ActivitySection>
 
           <ActivitySection title="Movement Monitor">
-            <MovementSparkline values={labState.graphSamples} />
+            <MovementSparkline values={usePlaceholderMetrics ? [] : labState.graphSamples} />
           </ActivitySection>
         </>
       ) : null}

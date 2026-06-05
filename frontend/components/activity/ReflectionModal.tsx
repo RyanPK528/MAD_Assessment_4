@@ -1,5 +1,16 @@
-import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
@@ -27,9 +38,21 @@ export function ReflectionModal({
 }: ReflectionModalProps) {
   const theme = useTheme();
   const activityStyles = useActivityStyles();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const [selfRating, setSelfRating] = useState('3');
   const [reflection, setReflection] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+
+  const maxCardHeight = windowHeight * 0.85;
+
+  useEffect(() => {
+    if (visible) {
+      setSelfRating('3');
+      setReflection('');
+      setLocalError(null);
+    }
+  }, [visible]);
 
   const handleConfirm = async () => {
     const rating = Number(selfRating);
@@ -55,70 +78,121 @@ export function ReflectionModal({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleCancel}>
-      <View style={[styles.overlay, { backgroundColor: theme.overlay }]}>
-        <ThemedView style={[styles.card, { borderColor: theme.border }]}>
-          <ThemedText type="sectionTitle">Submit attempt</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            Rate and reflect on your {activityName} attempt before submitting.
-          </ThemedText>
-
-          <ThemedText type="captionBold" style={styles.label}>
-            Self-rating (1–5)
-          </ThemedText>
-          <View style={styles.ratingRow}>
-            {['1', '2', '3', '4', '5'].map((value) => (
-              <Pressable
-                key={value}
-                onPress={() => setSelfRating(value)}
-                style={[activityStyles.chip, selfRating === value && activityStyles.chipActive]}
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: Math.max(insets.top, Layout.screenPadding),
+              paddingBottom: Math.max(insets.bottom, Layout.screenPadding),
+            },
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable style={[styles.overlay, { backgroundColor: theme.overlay }]} onPress={handleCancel}>
+            <Pressable onPress={(event) => event.stopPropagation()}>
+              <ThemedView
+                style={[
+                  styles.card,
+                  { borderColor: theme.border, maxHeight: maxCardHeight },
+                ]}
               >
-                <ThemedText
-                  type="captionBold"
-                  style={{ color: selfRating === value ? theme.onAccent : theme.textPrimary }}
+                <ScrollView
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={styles.cardInner}
                 >
-                  {value}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
+                  <ThemedText type="sectionTitle">Submit attempt</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    Rate and reflect on your {activityName} attempt before submitting.
+                  </ThemedText>
 
-          <ThemedText type="captionBold" style={styles.label}>
-            Reflection
-          </ThemedText>
-          <TextInput
-            value={reflection}
-            onChangeText={setReflection}
-            multiline
-            placeholder="What did you learn from this attempt?"
-            placeholderTextColor={theme.textSecondary}
-            style={[activityStyles.input, activityStyles.multiline]}
-          />
+                  <ThemedText type="captionBold" style={styles.label}>
+                    Self-rating (1–5)
+                  </ThemedText>
+                  <View style={styles.ratingRow}>
+                    {['1', '2', '3', '4', '5'].map((value) => (
+                      <Pressable
+                        key={value}
+                        onPress={() => setSelfRating(value)}
+                        style={[activityStyles.chip, selfRating === value && activityStyles.chipActive]}
+                      >
+                        <ThemedText
+                          type="captionBold"
+                          style={{ color: selfRating === value ? theme.onAccent : theme.textPrimary }}
+                        >
+                          {value}
+                        </ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
 
-          {localError || errorMessage ? (
-            <ThemedText type="small" style={{ color: theme.danger }}>
-              {localError ?? errorMessage}
-            </ThemedText>
-          ) : null}
+                  <ThemedText type="captionBold" style={styles.label}>
+                    Reflection
+                  </ThemedText>
+                  <TextInput
+                    value={reflection}
+                    onChangeText={setReflection}
+                    multiline
+                    placeholder="What did you learn from this attempt?"
+                    placeholderTextColor={theme.textSecondary}
+                    style={[activityStyles.input, activityStyles.multiline]}
+                  />
 
-          <View style={styles.actions}>
-            <AppButton label="Cancel" variant="outline" onPress={handleCancel} disabled={submitting} />
-            <AppButton label="Submit attempt" onPress={handleConfirm} loading={submitting} disabled={submitting} />
-          </View>
-        </ThemedView>
-      </View>
+                  {localError || errorMessage ? (
+                    <ThemedText type="small" style={{ color: theme.danger }}>
+                      {localError ?? errorMessage}
+                    </ThemedText>
+                  ) : null}
+
+                  <View style={styles.actions}>
+                    <AppButton
+                      label="Cancel"
+                      variant="outline"
+                      onPress={handleCancel}
+                      disabled={submitting}
+                    />
+                    <AppButton
+                      label="Submit attempt"
+                      onPress={handleConfirm}
+                      loading={submitting}
+                      disabled={submitting}
+                    />
+                  </View>
+                </ScrollView>
+              </ThemedView>
+            </Pressable>
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: Layout.screenPadding,
+  },
   overlay: {
     flex: 1,
     justifyContent: 'center',
-    padding: Layout.screenPadding,
   },
   card: {
     borderRadius: Radii.lg,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  cardInner: {
     padding: SpacingScale.lg,
     gap: SpacingScale.sm,
   },
@@ -131,8 +205,9 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   actions: {
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: SpacingScale.sm,
     marginTop: SpacingScale.sm,
+    paddingBottom: SpacingScale.xs,
   },
 });
