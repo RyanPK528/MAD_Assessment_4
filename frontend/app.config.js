@@ -14,7 +14,7 @@ module.exports = {
       EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID ?? '',
       EXPO_PUBLIC_FIREBASE_APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID ?? '',
       eas: {
-        "projectId": "d4677c44-0837-4863-9108-c46c2c5133b9"
+        "projectId": "9c7cd299-065d-4d1b-b690-f871e8bb5b54"
       }
       
     },
@@ -47,15 +47,9 @@ module.exports = {
         'expo-camera',
         {
           cameraPermission: 'Allow STEMM Lab to record parachute drop videos.',
-          microphonePermission: 'Allow STEMM Lab to record audio with videos.',
+          microphonePermission: 'Allow STEMM Lab to measure classroom sound levels.',
           recordAudioAndroid: true,
           recordAudioIOS: true,
-        },
-      ],
-      [
-        'expo-av',
-        {
-          microphonePermission: 'Allow STEMM Lab to measure classroom sound levels.',
         },
       ],
     ],

@@ -9,6 +9,13 @@ import { ensureSyncQueueInitialized } from '@/services/sqliteService';
 
 export default function RootLayout() {
   useEffect(() => {
+    // Request notification permission on app launch (safe for Expo Go — no-ops if unavailable)
+    import('@/services/notificationService').then(({ registerForNotifications }) => {
+      void registerForNotifications();
+    }).catch(() => {
+      // Notification module unavailable
+    });
+
     void ensureSyncQueueInitialized().then(async () => {
       try {
         const { syncPendingResults } = await import('@/services/activityResultService');

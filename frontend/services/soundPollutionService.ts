@@ -48,12 +48,50 @@ async function loadAudioModule(): Promise<AvAudio | null> {
     return cachedAudio;
   }
   try {
-    const mod = await import('expo-av');
-    cachedAudio = mod.Audio as AvAudio;
+    const expoAudio = await import('expo-audio');
+    // Access AudioModule which contains the AudioRecorder class
+    const AudioModule = (expoAudio as unknown as { AudioModule: { AudioRecorder: unknown } }).AudioModule;
+    const RecorderClass = AudioModule.AudioRecorder as new (options: object) => {
+      prepareToRecordAsync: (opts?: object) => Promise<void>;
+      record: () => void;
+      stop: () => Promise<void>;
+      getStatus: () => { isRecording: boolean; metering?: number };
+      uri: string | null;
+    };
+
+    cachedAudio = {
+      requestPermissionsAsync: async () => {
+        const result = await expoAudio.requestRecordingPermissionsAsync();
+        return { status: result.status };
+      },
+      setAudioModeAsync: async (mode: object) => {
+        await expoAudio.setAudioModeAsync(mode as Parameters<typeof expoAudio.setAudioModeAsync>[0]);
+      },
+      Recording: {
+        createAsync: async (options: object) => {
+          // Create recorder with metering enabled
+          const recorder = new RecorderClass({ isMeteringEnabled: true });
+          await recorder.prepareToRecordAsync();
+          recorder.record();
+          // Wrap to match our AvRecording interface
+          const wrapped: AvRecording = {
+            getStatusAsync: async () => {
+              const status = recorder.getStatus();
+              return { isRecording: status.isRecording, metering: status.metering };
+            },
+            stopAndUnloadAsync: async () => {
+              await recorder.stop();
+            },
+          };
+          return { recording: wrapped };
+        },
+        OptionsPresets: { HIGH_QUALITY: {} },
+      },
+    };
     return cachedAudio;
   } catch (error) {
     cachedAudio = null;
-    console.warn('[SoundPollution] expo-av unavailable. Run: npx expo install expo-av', error);
+    console.warn('[SoundPollution] Audio module unavailable.', error);
     return null;
   }
 }
@@ -109,7 +147,7 @@ export function createSoundPollutionController(onUpdate: (state: SoundPollutionS
     if (!Audio) {
       state = {
         ...state,
-        message: 'Audio module unavailable. Rebuild the app after running: npx expo install expo-av',
+        message: 'Audio module unavailable. Rebuild the app after running: npx expo install expo-audio',
       };
       publish();
       return false;
@@ -150,7 +188,7 @@ export function createSoundPollutionController(onUpdate: (state: SoundPollutionS
 
     const Audio = await loadAudioModule();
     if (!Audio) {
-      state = { ...state, message: 'Audio module unavailable. Rebuild after installing expo-av.' };
+      state = { ...state, message: 'Audio module unavailable. Rebuild after installing expo-audio.' };
       publish();
       return;
     }
