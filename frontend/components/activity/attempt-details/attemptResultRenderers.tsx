@@ -5,10 +5,8 @@ import {
   EarthquakeAttemptResults,
   HandFanAttemptResults,
 } from '@/components/activity/attempt-details/DesignActivityAttemptResults';
-import {
-  BreathingTrainerAttemptResults,
-  ReactionBoardAttemptResults,
-} from '@/components/activity/attempt-details/HealthActivityAttemptResults';
+import { BreathingTrainerAttemptResults } from '@/components/activity/attempt-details/BreathingTrainerAttemptResults';
+import { ReactionBoardAttemptResults } from '@/components/activity/attempt-details/HealthActivityAttemptResults';
 import { HumanPerformanceAttemptResults } from '@/components/activity/attempt-details/HumanPerformanceAttemptResults';
 import { ParachuteDropAttemptResults } from '@/components/activity/attempt-details/ParachuteDropAttemptResults';
 import { SoundPollutionAttemptResults } from '@/components/activity/attempt-details/SoundPollutionAttemptResults';

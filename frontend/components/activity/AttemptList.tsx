@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 
 import { AttemptCard } from '@/components/activity/AttemptCard';
-import { EmptyAttemptsMessage } from '@/components/activity/ActivitySubmissionPanel';
+import { EmptyAttemptsMessage } from '@/components/activity/EmptyAttemptsMessage';
 import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ActivityId } from '@/constants/activities';
