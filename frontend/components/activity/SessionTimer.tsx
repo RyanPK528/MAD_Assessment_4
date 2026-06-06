@@ -1,9 +1,10 @@
-import { Button, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { Layout, Radii, SpacingScale, getShadowStyle } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { Spacing } from '@/constants/theme';
 
 interface SessionTimerProps {
   elapsedSec: number;
@@ -35,12 +36,22 @@ export function SessionTimer({
   const overLimit = maxSec !== undefined && elapsedSec >= maxSec;
 
   return (
-    <ThemedView style={[styles.container, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-      <ThemedText type="smallBold">{label}</ThemedText>
+    <ThemedView
+      style={[
+        styles.container,
+        {
+          borderColor: theme.border,
+          backgroundColor: theme.surface,
+          ...getShadowStyle('sm', theme.shadow),
+        },
+      ]}>
+      <ThemedText type="smallBold" themeColor="textSecondary">
+        {label}
+      </ThemedText>
       <ThemedText type="title" style={{ color: overLimit ? theme.danger : theme.textPrimary }}>
         {formatTime(elapsedSec)}
         {maxSec !== undefined && (
-          <ThemedText type="small" style={{ color: theme.textSecondary }}>
+          <ThemedText type="small" themeColor="textSecondary">
             {' '}
             / {formatTime(maxSec)}
           </ThemedText>
@@ -48,11 +59,11 @@ export function SessionTimer({
       </ThemedText>
       <View style={styles.buttonRow}>
         {!isRunning ? (
-          <Button title="Start" onPress={onStart} />
+          <AppButton label="Start" onPress={onStart} fullWidth={false} />
         ) : (
-          <Button title="Stop" onPress={onStop} />
+          <AppButton label="Stop" onPress={onStop} fullWidth={false} />
         )}
-        <Button title="Reset" onPress={onReset} />
+        <AppButton label="Reset" onPress={onReset} variant="outline" fullWidth={false} />
       </View>
     </ThemedView>
   );
@@ -60,14 +71,16 @@ export function SessionTimer({
 
 const styles = StyleSheet.create({
   container: {
-    padding: Spacing.four,
-    borderRadius: Spacing.three,
+    padding: Layout.cardPadding,
+    borderRadius: Radii.xl,
     borderWidth: 1,
-    gap: Spacing.two,
+    gap: SpacingScale.sm,
     alignItems: 'center',
   },
   buttonRow: {
     flexDirection: 'row',
-    gap: Spacing.three,
+    gap: SpacingScale.sm,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
 });

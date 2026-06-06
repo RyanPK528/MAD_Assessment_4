@@ -44,6 +44,9 @@ export function useActivityStyles() {
       textAlignVertical: 'top',
     },
     chip: {
+      alignSelf: 'flex-start',
+      alignItems: 'center',
+      justifyContent: 'center',
       paddingVertical: SpacingScale.xs,
       paddingHorizontal: SpacingScale.md,
       borderRadius: Radii.pill,

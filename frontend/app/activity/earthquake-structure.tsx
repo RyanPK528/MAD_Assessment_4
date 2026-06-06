@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet, TextInput, View } from 'react-native';
 
 import { ActivityLayout, ActivityTab } from '@/components/activity/ActivityLayout';
 import { ActivityOverviewPanel } from '@/components/activity/ActivityOverviewPanel';
@@ -8,19 +8,22 @@ import { ActivitySubmissionPanel } from '@/components/activity/ActivitySubmissio
 import { DesignTrialCard } from '@/components/activity/DesignTrialCard';
 import { ReflectionModal } from '@/components/activity/ReflectionModal';
 import { TrialResultsTable } from '@/components/activity/TrialResultsTable';
+import { AppButton } from '@/components/ui/app-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { ACTIVITY_CATALOG } from '@/constants/activityCatalog';
+import { SpacingScale } from '@/constants/theme';
+import { useActivityStyles } from '@/hooks/use-activity-styles';
 import { useActivitySubmission } from '@/hooks/useActivitySubmission';
 import { useTheme } from '@/hooks/use-theme';
 import {
   createEarthquakeStructureController,
   EarthquakeState,
 } from '@/services/earthquakeStructureService';
-import { SpacingScale } from '@/constants/theme';
 
 export default function EarthquakeStructureScreen() {
   const theme = useTheme();
+  const activityStyles = useActivityStyles();
   const [activeTab, setActiveTab] = useState<ActivityTab>('overview');
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<EarthquakeState>({
@@ -74,55 +77,71 @@ export default function EarthquakeStructureScreen() {
 
   const activityContent = (
     <ThemedView style={styles.container}>
-      <ActivitySection title="Structure Design">
-      <DesignTrialCard
-        title={`Design ${state.designs.length + 1} of 3`}
-        label={draft.label}
-        onLabelChange={(v) => setDraft((d) => ({ ...d, label: v }))}
-        prediction={draft.prediction}
-        onPredictionChange={(v) => setDraft((d) => ({ ...d, prediction: v }))}
-      >
-        <View style={styles.row}>
-          <View style={styles.halfField}>
-            <ThemedText type="small">Folds</ThemedText>
-            <TextInput
-              value={draft.folds}
-              onChangeText={(v) => setDraft((d) => ({ ...d, folds: v }))}
-              keyboardType="number-pad"
-              style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
-            />
+      <ActivitySection title="Structure design">
+        <DesignTrialCard
+          title={`Design ${state.designs.length + 1} of 3`}
+          label={draft.label}
+          onLabelChange={(v) => setDraft((d) => ({ ...d, label: v }))}
+          prediction={draft.prediction}
+          onPredictionChange={(v) => setDraft((d) => ({ ...d, prediction: v }))}
+        >
+          <View style={styles.row}>
+            <View style={styles.halfField}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Folds
+              </ThemedText>
+              <TextInput
+                value={draft.folds}
+                onChangeText={(v) => setDraft((d) => ({ ...d, folds: v }))}
+                keyboardType="number-pad"
+                style={activityStyles.input}
+              />
+            </View>
+            <View style={styles.halfField}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Pillars
+              </ThemedText>
+              <TextInput
+                value={draft.pillars}
+                onChangeText={(v) => setDraft((d) => ({ ...d, pillars: v }))}
+                keyboardType="number-pad"
+                style={activityStyles.input}
+              />
+            </View>
           </View>
-          <View style={styles.halfField}>
-            <ThemedText type="small">Pillars</ThemedText>
-            <TextInput
-              value={draft.pillars}
-              onChangeText={(v) => setDraft((d) => ({ ...d, pillars: v }))}
-              keyboardType="number-pad"
-              style={[styles.input, { color: theme.textPrimary, borderColor: theme.border }]}
-            />
-          </View>
-        </View>
-      </DesignTrialCard>
+        </DesignTrialCard>
       </ActivitySection>
 
-      <ActivitySection title="Vibration Test">
+      <ActivitySection title="Vibration test">
         <ThemedText type="body">Elapsed: {state.elapsedSec}s</ThemedText>
-        <ThemedText type="body">Displacement: {state.currentDisplacementCm.toFixed(2)} cm (max {state.maxDisplacementCm.toFixed(2)})</ThemedText>
-        <ThemedText type="body">Rotation: {state.currentRotationDeg.toFixed(2)}° (max {state.maxRotationDeg.toFixed(2)})</ThemedText>
-        <ThemedText type="small" style={{ color: theme.textSecondary }}>{state.message}</ThemedText>
+        <ThemedText type="body">
+          Displacement: {state.currentDisplacementCm.toFixed(2)} cm (max {state.maxDisplacementCm.toFixed(2)})
+        </ThemedText>
+        <ThemedText type="body">
+          Rotation: {state.currentRotationDeg.toFixed(2)}° (max {state.maxRotationDeg.toFixed(2)})
+        </ThemedText>
+        <ThemedText type="small" themeColor="textSecondary">
+          {state.message}
+        </ThemedText>
         <View style={styles.buttonRow}>
-          <Button
-            title={state.isVibrating ? 'Testing…' : 'Start earthquake test (10s)'}
+          <AppButton
+            label={state.isVibrating ? 'Testing…' : 'Start earthquake test (10s)'}
             onPress={() => controller.startVibrationTest(10)}
             disabled={state.isVibrating}
           />
-          {state.isVibrating && <Button title="Stop early" onPress={() => controller.stopVibrationTest()} />}
+          {state.isVibrating && (
+            <AppButton label="Stop early" onPress={() => controller.stopVibrationTest()} variant="outline" />
+          )}
         </View>
-        <Button title="Save design results" onPress={() => controller.saveDesign()} disabled={state.isVibrating} />
+        <AppButton
+          label="Save design results"
+          onPress={() => controller.saveDesign()}
+          disabled={state.isVibrating}
+        />
       </ActivitySection>
 
       {state.designs.length > 0 && (
-        <ActivitySection title="Results Comparison">
+        <ActivitySection title="Results comparison">
           <TrialResultsTable
             rows={state.designs.map((d) => ({
               label: d.label,
@@ -139,11 +158,11 @@ export default function EarthquakeStructureScreen() {
       )}
 
       <ActivitySection title="Submit">
-      <Button
-        title="Submit attempt"
-        onPress={handleSubmit}
-        disabled={!submission.canSubmit || state.designs.length === 0}
-      />
+        <AppButton
+          label="Submit attempt"
+          onPress={handleSubmit}
+          disabled={!submission.canSubmit || state.designs.length === 0}
+        />
       </ActivitySection>
     </ThemedView>
   );
@@ -178,6 +197,5 @@ const styles = StyleSheet.create({
   container: { gap: SpacingScale.xs },
   row: { flexDirection: 'row', gap: SpacingScale.sm },
   halfField: { flex: 1, gap: SpacingScale.xxs },
-  input: { borderWidth: 1, borderRadius: SpacingScale.sm, padding: SpacingScale.sm },
   buttonRow: { gap: SpacingScale.sm },
 });
