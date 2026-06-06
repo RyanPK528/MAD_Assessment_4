@@ -105,6 +105,9 @@ export default function ParachuteDropScreen() {
       setIsRecording(true);
       console.log('Attempting to start recording...');
 
+      // Start the drop timer simultaneously with recording
+      controller.startDropTimer();
+
       const video = await cameraRef.current.recordAsync({ maxDuration: 30 });
 
       console.log('Recording finished successfully:', video?.uri);
@@ -123,6 +126,8 @@ export default function ParachuteDropScreen() {
     if (cameraRef.current && isRecording) {
       console.log('Stopping recording...');
       cameraRef.current.stopRecording();
+      // Stop the drop timer when video recording stops
+      controller.stopDropTimer();
     } else {
       setShowCamera(false);
     }
@@ -132,7 +137,11 @@ export default function ParachuteDropScreen() {
     submission.requestSubmit({
       dropHeightM: state.dropHeightM,
       toyMassKg: state.toyMassKg,
-      trials: state.trials,
+      trials: state.trials.map((t) => ({
+        ...t,
+        // Include videoUri so teachers can review the drop videos
+        videoUri: t.videoUri,
+      })),
       sessionTimerSec: state.sessionTimerSec,
     });
   };

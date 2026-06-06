@@ -43,6 +43,7 @@ module.exports = {
     plugins: [
       ...appJson.expo.plugins,
       'expo-sqlite',
+      'expo-video',
       [
         'expo-camera',
         {
