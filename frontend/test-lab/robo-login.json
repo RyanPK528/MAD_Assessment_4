@@ -1,0 +1,28 @@
+[
+  {
+    "eventType": "VIEW_TEXT_CHANGED",
+    "replacementText": "testlab@stemmlab.test",
+    "elementDescriptors": [
+      {
+        "resourceId": "login-email"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_TEXT_CHANGED",
+    "replacementText": "YOUR_TEST_PASSWORD",
+    "elementDescriptors": [
+      {
+        "resourceId": "login-password"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "elementDescriptors": [
+      {
+        "text": "Sign in"
+      }
+    ]
+  }
+]

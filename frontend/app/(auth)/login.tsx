@@ -47,6 +47,7 @@ export default function LoginScreen() {
             <AppCard>
               <AppInput
                 label="Email"
+                testID="login-email"
                 autoCapitalize="none"
                 autoComplete="email"
                 keyboardType="email-address"
@@ -56,6 +57,7 @@ export default function LoginScreen() {
               />
               <AppInput
                 label="Password"
+                testID="login-password"
                 autoCapitalize="none"
                 secureTextEntry
                 onChangeText={setPassword}

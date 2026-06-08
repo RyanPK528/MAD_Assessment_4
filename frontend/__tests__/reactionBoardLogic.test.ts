@@ -86,6 +86,18 @@ describe('reactionBoardLogic', () => {
       expect(trial.accuracyPercent).toBe(80);
       expect(trial.outcome).toContain('80%');
     });
+
+    it('marks incorrect tap prediction outside tolerance', () => {
+      const trial = buildMemberTrial(0, 'Jordan', 2, '200 ms', 450);
+      expect(trial.wasCorrect).toBe(false);
+    });
+
+    it('preserves member index on tap trial', () => {
+      const trial = buildMemberTrial(1, 'Casey', 1, '350 ms', 340);
+      expect(trial.memberIndex).toBe(1);
+      expect(trial.memberName).toBe('Casey');
+      expect(trial.reactionTimeMs).toBe(340);
+    });
   });
 
   describe('group averages', () => {

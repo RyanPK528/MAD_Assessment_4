@@ -159,7 +159,17 @@ npm test -- authService.grade.test.ts
 
 Jest is configured in `frontend/jest.config.js` with the `jest-expo` preset. Coverage is collected from `services/` and `components/`.
 
-A Firebase Test Lab scaffold is included at `frontend/firebase-test-lab.yml` for future CI integration.
+```bash
+npm run test:coverage
+```
+
+A full testing write-up for assessment (Jest + Firebase Test Lab + reflection) is in [`docs/TESTING_REPORT.md`](../docs/TESTING_REPORT.md).
+
+Firebase Test Lab configs:
+
+- [`frontend/firebase-test-lab.yml`](frontend/firebase-test-lab.yml) — instrumentation scaffold (Person A example)
+- [`frontend/firebase-test-lab-robo.yml`](frontend/firebase-test-lab-robo.yml) — Robo test, Pixel 4 API 30 (Person B)
+- [`frontend/test-lab/RUN_INSTRUCTIONS.md`](frontend/test-lab/RUN_INSTRUCTIONS.md) — step-by-step for Person B run
 
 ---
 
