@@ -18,6 +18,7 @@ interface DesignTrialCardProps {
   onNotesChange?: (value: string) => void;
   onSave?: () => void;
   saveDisabled?: boolean;
+  labelPlaceholder?: string;
   children?: ReactNode;
 }
 
@@ -31,6 +32,7 @@ export function DesignTrialCard({
   onNotesChange,
   onSave,
   saveDisabled = false,
+  labelPlaceholder = 'Design description',
   children,
 }: DesignTrialCardProps) {
   const theme = useTheme();
@@ -53,7 +55,7 @@ export function DesignTrialCard({
       <TextInput
         value={label}
         onChangeText={onLabelChange}
-        placeholder="e.g. No parachute (baseline)"
+        placeholder={labelPlaceholder}
         placeholderTextColor={theme.textSecondary}
         style={activityStyles.input}
       />

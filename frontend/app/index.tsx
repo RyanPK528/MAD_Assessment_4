@@ -25,7 +25,7 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.actions}>
-          <AppButton label="Log in" onPress={() => router.push('/login')} />
+          <AppButton label="Log in" testID="landing-login" onPress={() => router.push('/login')} />
           <AppButton label="Create team account" onPress={() => router.push('/signup')} variant="secondary" />
         </View>
 

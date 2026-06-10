@@ -13,6 +13,7 @@ interface AppButtonProps {
   disabled?: boolean;
   loading?: boolean;
   fullWidth?: boolean;
+  testID?: string;
   accessibilityLabel?: string;
   style?: ViewStyle;
 }
@@ -24,6 +25,7 @@ export function AppButton({
   disabled = false,
   loading = false,
   fullWidth = true,
+  testID,
   accessibilityLabel,
   style,
 }: AppButtonProps) {
@@ -57,10 +59,11 @@ export function AppButton({
 
   return (
     <Pressable
+      testID={testID}
       onPress={onPress}
       disabled={isDisabled}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={accessibilityLabel ?? testID ?? label}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.base,

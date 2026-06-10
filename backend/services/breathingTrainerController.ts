@@ -5,6 +5,8 @@ import { Platform } from 'react-native';
 import {
   analyzeBreathingSignal,
   analyzeBreathingSignalLive,
+  computeBreathsPerMinute,
+  monotonicBreathCount,
   RECORDING_DURATION_SEC,
   START_COUNTDOWN_SEC,
 } from './breathingTrainerLogic';
@@ -114,16 +116,16 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
 
     const durationSec = Math.max(1, state.elapsedSec);
     const metrics = analyzeBreathingSignalLive(zSamples, durationSec);
-    state.breathCount = metrics.breathCount;
-    state.breathsPerMinute = metrics.breathsPerMinute;
+    state.breathCount = monotonicBreathCount(state.breathCount, metrics.breathCount);
+    state.breathsPerMinute = computeBreathsPerMinute(state.breathCount, durationSec);
     state.centeredSignal = metrics.centeredSignal;
     publish();
   };
 
   const applyAnalysis = (durationSec: number) => {
     const metrics = analyzeBreathingSignal(zSamples, durationSec);
-    state.breathCount = metrics.breathCount;
-    state.breathsPerMinute = metrics.breathsPerMinute;
+    state.breathCount = monotonicBreathCount(state.breathCount, metrics.breathCount);
+    state.breathsPerMinute = computeBreathsPerMinute(state.breathCount, durationSec);
     state.centeredSignal = metrics.centeredSignal;
     state.elapsedSec = durationSec;
   };

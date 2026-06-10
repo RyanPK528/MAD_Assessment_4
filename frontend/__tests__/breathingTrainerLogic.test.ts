@@ -10,6 +10,7 @@ import {
   downsampleSignal,
   evaluateBreathingPrediction,
   getOverallProgress,
+  monotonicBreathCount,
   validateFinalSubmission,
   whittakerEilersSmooth,
 } from '../../backend/services/breathingTrainerLogic';
@@ -53,6 +54,23 @@ describe('breathingTrainerLogic', () => {
 
     it('computes breaths per minute from count and duration', () => {
       expect(computeBreathsPerMinute(15, 30)).toBe(30);
+    });
+
+    it('monotonicBreathCount never decreases the displayed count', () => {
+      expect(monotonicBreathCount(3, 2)).toBe(3);
+      expect(monotonicBreathCount(3, 5)).toBe(5);
+      expect(monotonicBreathCount(0, 1)).toBe(1);
+    });
+
+    it('keeps breath count stable when re-analysis detects fewer peaks', () => {
+      const shortSignal = buildSyntheticBreathSignal(4);
+      const longSignal = [...shortSignal, ...Array.from({ length: 30 }, () => 0.01)];
+      const shortCentered = centerSignal(whittakerEilersSmooth(shortSignal));
+      const longCentered = centerSignal(whittakerEilersSmooth(longSignal));
+      const earlierCount = detectBreaths(shortCentered);
+      const laterCount = detectBreaths(longCentered);
+      const displayed = monotonicBreathCount(earlierCount, laterCount);
+      expect(displayed).toBeGreaterThanOrEqual(earlierCount);
     });
 
     it('downsamples long signals to target length', () => {
