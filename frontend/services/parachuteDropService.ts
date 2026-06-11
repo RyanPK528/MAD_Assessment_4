@@ -200,7 +200,11 @@ export function createParachuteDropController(onUpdate: (state: ParachuteDropSta
   };
 
   const startDropTimer = () => {
-    if (dropInterval) return;
+    // Clear any existing drop timer so it can be restarted (e.g., from camera recording)
+    if (dropInterval) {
+      clearInterval(dropInterval);
+      dropInterval = null;
+    }
     dropStartTime = Date.now();
     state = { ...state, dropTimerRunning: true, dropTimerSec: 0, phase: 'recording' };
     publish();

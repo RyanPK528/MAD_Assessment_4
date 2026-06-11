@@ -32,7 +32,7 @@
   },
   {
     "eventType": "VIEW_TEXT_CHANGED",
-    "replacementText": "testlab@stemmlab.test",
+    "replacementText": "zenithdeva@gmail.com",
     "elementDescriptors": [
       {
         "contentDescription": "login-email",
@@ -42,7 +42,7 @@
   },
   {
     "eventType": "VIEW_TEXT_CHANGED",
-    "replacementText": "testlabpass",
+    "replacementText": "G3passn",
     "elementDescriptors": [
       {
         "contentDescription": "login-password",

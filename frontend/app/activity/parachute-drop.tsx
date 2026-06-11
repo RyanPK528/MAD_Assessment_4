@@ -151,6 +151,15 @@ export default function ParachuteDropScreen() {
       <View style={styles.cameraContainer}>
         <CameraView ref={cameraRef} style={styles.camera} mode="video" facing="back" />
 
+        {/* Drop timer overlay visible during recording */}
+        {state.dropTimerRunning && (
+          <View style={styles.timerOverlay}>
+            <ThemedText type="title" style={styles.timerText}>
+              {state.dropTimerSec.toFixed(3)} s
+            </ThemedText>
+          </View>
+        )}
+
         <View style={styles.cameraControls}>
           <AppButton
             label={isRecording ? 'Recording…' : 'Start recording'}
@@ -347,6 +356,24 @@ const styles = StyleSheet.create({
   trialTabs: { flexDirection: 'row', gap: SpacingScale.sm, flexWrap: 'wrap' },
   cameraContainer: { flex: 1 },
   camera: { flex: 1 },
+  timerOverlay: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  timerText: {
+    color: '#fff',
+    fontSize: 36,
+    fontWeight: 'bold',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
   cameraControls: {
     position: 'absolute',
     bottom: 40,
