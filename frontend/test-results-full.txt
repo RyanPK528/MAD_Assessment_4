@@ -1,0 +1,34 @@
+node.exe : npm warn Unknown env config "devdir". This will stop working in the next major version of npm. See `npm 
+help npmrc` for supported config options.
+At C:\Users\ryanp\AppData\Roaming\npm\npm.ps1:24 char:5
++     & "node$exe"  "$basedir/node_modules/npm/bin/npm-cli.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (npm warn Unknow...config options.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+
+> frontend@1.0.0 test
+> jest
+
+PASS __tests__/authService.grade.test.ts
+PASS __tests__/activityAttemptUtils.test.ts
+PASS __tests__/parachuteDropService.test.ts
+PASS __tests__/breathingTrainerIntegration.test.ts
+PASS __tests__/humanPerformanceIntegration.test.ts
+PASS __tests__/reactionBoardLogic.test.ts
+PASS __tests__/breathingTrainerLogic.test.ts
+PASS __tests__/humanPerformanceService.test.ts
+PASS __tests__/earthquakeIntegration.test.ts
+PASS __tests__/earthquakeSoundServices.test.ts
+PASS __tests__/parachuteDropIntegration.test.ts
+
+Test Suites: 11 passed, 11 total
+Tests:       95 passed, 95 total
+Snapshots:   0 total
+Time:        5.07 s
+Ran all test suites.
+npm notice
+npm notice New minor version of npm available! 11.13.0 -> 11.16.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.16.0
+npm notice To update run: npm install -g npm@11.16.0
+npm notice

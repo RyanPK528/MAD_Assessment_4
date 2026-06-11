@@ -79,6 +79,10 @@ export function computeBreathsPerMinute(breathCount: number, durationSec: number
   return Math.round((breathCount / safeDuration) * 60);
 }
 
+export function monotonicBreathCount(previous: number, detected: number): number {
+  return Math.max(previous, detected);
+}
+
 export function downsampleSignal(values: number[], targetLength = CHART_DISPLAY_SAMPLES): number[] {
   if (values.length === 0) {
     return [];

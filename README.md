@@ -159,7 +159,16 @@ npm test -- authService.grade.test.ts
 
 Jest is configured in `frontend/jest.config.js` with the `jest-expo` preset. Coverage is collected from `services/` and `components/`.
 
-A Firebase Test Lab scaffold is included at `frontend/firebase-test-lab.yml` for future CI integration.
+```bash
+npm run test:coverage
+```
+
+A full testing write-up for assessment (Jest + Firebase Test Lab + reflection) is in [`docs/TESTING_REPORT.md`](../docs/TESTING_REPORT.md).
+
+Firebase Test Lab configs:
+
+- [`frontend/firebase-test-lab.yml`](frontend/firebase-test-lab.yml) — instrumentation scaffold (Person A example)
+- [`frontend/firebase-test-lab-robo.yml`](frontend/firebase-test-lab-robo.yml) — Robo test, Pixel 4 API 30 (Person B)
 
 ---
 
@@ -213,8 +222,7 @@ Each activity uses a three-tab layout (Overview, Activity, Submission):
 
 ### Offline sync
 
-- Activity results queued locally in SQLite when offline
-- `syncPendingResults()` pushes pending records to Firestore when the app regains connectivity
+Activity submissions are saved locally first, then pushed to Firestore when online. See [Data storage](#data-storage) for the full flow.
 
 ### Theme support
 
@@ -226,6 +234,86 @@ Each activity uses a three-tab layout (Overview, Activity, Submission):
 Main tabs: **Dashboard**, **Activities**, **Leaderboard**, **Settings**
 
 Activity screens navigate back explicitly to the Activities list (not the Dashboard).
+
+---
+
+## Data storage
+
+STEMM Lab uses a **two-tier storage model**: Firebase Firestore is the cloud source of truth for team data and shared progress, while **SQLite** on the device buffers activity submissions when the network is unavailable.
+
+### Firebase (online)
+
+| Service | Role |
+| ------- | ---- |
+| **Firebase Authentication** | Team login (one email/password per team). Session persisted on device via AsyncStorage. |
+| **Cloud Firestore** | Stores team profiles, group documents, activity results, and leaderboard data. |
+
+Key Firestore collections:
+
+- **`users/{uid}`** — links an auth account to a `groupId`, plus team name, member names, and grade level.
+- **`groups/{groupId}`** — team progress, member list, and an **`activityResults`** array containing every submitted attempt (sensor data, reflection, self-rating, GPS, timestamps).
+
+The Dashboard, Leaderboard, and activity **Submission** tabs read from Firestore. Leaderboard rankings and completion percentages are derived from each group's `activityResults` and `completedActivitiesCount`.
+
+### SQLite (offline queue)
+
+On iOS and Android, the app uses **`expo-sqlite`** with a local database file `stemm_lab_offline.db`. A single table, **`offline_sync_queue`**, stores submissions waiting to reach Firestore:
+
+| Column | Purpose |
+| ------ | ------- |
+| `payload` | JSON activity attempt (activity ID, attempt data, reflection, self-rating, etc.) |
+| `status` | `pending`, `synced`, or `failed` |
+| `latitude` / `longitude` | Optional GPS captured at submit time |
+| `createdAt` / `updatedAt` | Timestamps for queue ordering and retries |
+
+SQLite is **not** a full offline copy of the app database. It is a **sync queue** so teams can submit attempts without an immediate network connection.
+
+On web, a lightweight in-memory fallback is used instead of SQLite (`sqliteService.web.ts`).
+
+### How a submission flows
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant App
+  participant SQLite
+  participant Firestore
+
+  User->>App: Submit attempt with reflection
+  App->>SQLite: INSERT pending record
+  App->>Firestore: syncPendingResults
+  alt Online and authenticated
+    Firestore-->>App: arrayUnion activityResults
+    App->>SQLite: mark synced
+  else Offline or error
+    SQLite-->>App: stays pending
+  end
+```
+
+1. **Validate** — self-rating (1–5) and reflection text are checked.
+2. **Queue locally** — `saveActivityAttempt()` writes a row to `offline_sync_queue` with status `pending` (`sqliteService.native.ts`).
+3. **Sync immediately** — the app calls `syncPendingResults()` right after queuing.
+4. **Push to Firestore** — for each pending record, the sync service loads the team's `groups/{groupId}` document and appends the attempt with `arrayUnion` on `activityResults`. If this is the team's first submission for that activity, `completedActivitiesCount` is incremented.
+5. **Mark complete** — on success, the queue row is updated to `synced`; on failure, it stays `pending` (or is marked `failed` for invalid payloads).
+
+Implementation lives in [`frontend/services/activityResultService.ts`](frontend/services/activityResultService.ts) and [`frontend/services/sqliteService.native.ts`](frontend/services/sqliteService.native.ts).
+
+### When sync runs
+
+Pending records are flushed to Firestore:
+
+- **App launch** — `RootLayout` initializes the queue and calls `syncPendingResults()`.
+- **After each submission** — attempted immediately when the user submits an attempt.
+- **Dashboard / Leaderboard refresh** — pull-to-refresh triggers sync before reloading stats.
+- **Background fetch** (optional) — `backgroundTaskService.ts` can run periodic sync when the app is backgrounded.
+
+If a submission is made offline, it remains in SQLite until a later sync succeeds. Once synced, the attempt appears in the activity Submission tab and contributes to leaderboard progress.
+
+### Design rationale
+
+- **SQLite first** — guarantees the student gets confirmation that their work was saved on-device even without connectivity.
+- **Firestore second** — centralizes team results so the leaderboard and multi-device access stay consistent.
+- **Queue with retry** — failed or deferred uploads are not lost; they are retried on the next sync cycle instead of requiring the user to resubmit.
 
 ---
 

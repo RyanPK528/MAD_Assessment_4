@@ -1,0 +1,61 @@
+"roboscript": {
+  "executionMode": {
+    "strict": true,
+    "dismiss_popups": true,
+    "notify": true
+  },
+  "postscript": {
+    "terminate": false
+  }
+}
+[
+  {
+    "eventType": "WAIT",
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "elementDescriptors": [
+      {
+        "text": "Log in"
+      }
+    ]
+  },
+  {
+    "eventType": "WAIT_FOR_ELEMENT",
+    "delayTime": 15000,
+    "elementDescriptors": [
+      {
+        "text": "Welcome back"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_TEXT_CHANGED",
+    "replacementText": "testlab@stemmlab.test",
+    "elementDescriptors": [
+      {
+        "contentDescription": "login-email",
+        "resourceIdRegex": ".*login-email.*"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_TEXT_CHANGED",
+    "replacementText": "testlabpass",
+    "elementDescriptors": [
+      {
+        "contentDescription": "login-password",
+        "resourceIdRegex": ".*login-password.*"
+      }
+    ]
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "elementDescriptors": [
+      {
+        "text": "Sign in"
+      }
+    ]
+  }
+]

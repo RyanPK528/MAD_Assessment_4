@@ -230,6 +230,7 @@ export default function ParachuteDropScreen() {
             <DesignTrialCard
               title={activeTrial.label}
               label={activeTrial.label}
+              labelPlaceholder="e.g. No parachute (baseline)"
               onLabelChange={(v) => controller.updateActiveTrial({ label: v })}
               prediction={activeTrial.prediction}
               onPredictionChange={(v) => controller.updateActiveTrial({ prediction: v })}

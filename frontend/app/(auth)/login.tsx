@@ -38,7 +38,7 @@ export default function LoginScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             <View style={styles.header}>
-              <ThemedText type="pageTitle">Welcome back</ThemedText>
+              <ThemedText type="pageTitle">Welcome Back</ThemedText>
               <ThemedText type="caption" themeColor="textSecondary">
                 Sign in to your team account
               </ThemedText>
@@ -47,6 +47,7 @@ export default function LoginScreen() {
             <AppCard>
               <AppInput
                 label="Email"
+                testID="login-email"
                 autoCapitalize="none"
                 autoComplete="email"
                 keyboardType="email-address"
@@ -56,13 +57,14 @@ export default function LoginScreen() {
               />
               <AppInput
                 label="Password"
+                testID="login-password"
                 autoCapitalize="none"
                 secureTextEntry
                 onChangeText={setPassword}
                 placeholder="Enter password"
                 value={password}
               />
-              <AppButton label="Sign in" onPress={handleLogin} loading={loading} />
+              <AppButton label="Sign in" testID="login-submit" onPress={handleLogin} loading={loading} />
             </AppCard>
 
             <Link href="/signup" style={styles.link}>
