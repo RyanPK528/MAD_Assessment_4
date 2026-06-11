@@ -4,10 +4,12 @@ import { Platform } from 'react-native';
 import { AppIcon } from '@/components/ui/app-icon';
 import { SpacingScale, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context/lib/typescript/src/SafeAreaContext';
 
 export default function TabsLayout() {
   const theme = useTheme();
-
+  const insets = useSafeAreaInsets();
+  
   return (
     <Tabs
       screenOptions={{
@@ -18,8 +20,8 @@ export default function TabsLayout() {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
           borderTopWidth: 1,
-          height: Platform.select({ ios: 84, default: 72 }),
-          paddingBottom: Platform.select({ ios: SpacingScale.lg, default: SpacingScale.sm }),
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom,
           paddingTop: SpacingScale.xs,
         },
         tabBarLabelStyle: {
