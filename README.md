@@ -173,13 +173,11 @@ Independent async operations run concurrently via `Promise.all` to reduce screen
 | Settings     | `getUserProfile(uid)` + `fetchGroupForUser(uid)`         |
 | Battery hook | `getBatteryLevelAsync()` + `getBatteryStateAsync()`      |
 
-[`frontend/services/parallelProcessingService.ts`](frontend/services/parallelProcessingService.ts) provides `processInChunks()` and `runWithConcurrency()` for cooperative scheduling on the JavaScript thread—designed to keep the UI responsive when processing large sensor datasets. These utilities are implemented but not yet wired into activity screens; sensor services use throttled listeners instead. React Native does not expose Web Workers on mobile.
+[`frontend/services/parallelProcessingService.ts`](frontend/services/parallelProcessingService.ts) provides `processInChunks()` and `runWithConcurrency()` for cooperative scheduling on the JavaScript thread—designed to keep the UI responsive when processing large sensor datasets.
 
 ### Background Tasks
 
 [`frontend/services/backgroundTaskService.ts`](frontend/services/backgroundTaskService.ts) defines a background task `STEMM_LAB_BACKGROUND_SYNC` using `expo-task-manager` and `expo-background-fetch`. When triggered by the OS, it calls `syncPendingResults()` to push pending SQLite queue items to Firestore. `registerBackgroundSync()` registers the task with a 15-minute minimum interval and survives device reboot.
-
-**Note:** The task is defined at module level but `registerBackgroundSync()` is not yet called from [`frontend/app/_layout.tsx`](frontend/app/_layout.tsx). Foreground sync still runs on app launch, pull-to-refresh, and immediately after each submission. Native Android WorkManager is not used; Expo's cross-platform task manager is the equivalent for the managed workflow.
 
 ### Notifications
 
