@@ -22,6 +22,7 @@ module.exports = {
       ...appJson.expo.ios,
       infoPlist: {
         ...(appJson.expo.ios?.infoPlist ?? {}),
+        UIBackgroundModes: ['fetch'],
         NSCameraUsageDescription: 'STEMM Lab uses the camera to record parachute drop videos for slow-motion analysis.',
         NSMicrophoneUsageDescription: 'STEMM Lab uses the microphone to measure classroom sound levels.',
         NSLocationWhenInUseUsageDescription: 'STEMM Lab tags activity results with your location for sound zone mapping.',

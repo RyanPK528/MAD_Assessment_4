@@ -1,5 +1,6 @@
 import {
   analyzeBreathingSignal,
+  analyzeBreathingSignalAsync,
   analyzeBreathingSignalLive,
   buildMemberAttempt,
   buildPhaseResult,
@@ -83,6 +84,15 @@ describe('breathingTrainerLogic', () => {
       expect(metrics.durationSec).toBe(30);
       expect(metrics.breathCount).toBeGreaterThan(0);
       expect(metrics.centeredSignal.length).toBeLessThanOrEqual(60);
+    });
+
+    it('analyzeBreathingSignalAsync matches sync analysis', async () => {
+      const signal = buildSyntheticBreathSignal(5);
+      const syncMetrics = analyzeBreathingSignal(signal, 30);
+      const asyncMetrics = await analyzeBreathingSignalAsync(signal, 30);
+      expect(asyncMetrics.breathCount).toBe(syncMetrics.breathCount);
+      expect(asyncMetrics.breathsPerMinute).toBe(syncMetrics.breathsPerMinute);
+      expect(asyncMetrics.centeredSignal).toEqual(syncMetrics.centeredSignal);
     });
 
     it('supports live analysis with short elapsed windows', () => {

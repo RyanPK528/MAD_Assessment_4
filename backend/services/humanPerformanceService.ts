@@ -9,6 +9,7 @@ import {
   magnitudeDelta,
   smoothSignal,
 } from '../utils/motionAnalysis';
+import { createBatchProcessor, yieldToEventLoop } from '../utils/cooperativeScheduling';
 import {
   JERK_DELTA_THRESHOLD,
   MOVEMENT_PHASES,
@@ -37,6 +38,8 @@ export type { MovementPhase, StretchAttemptResult, StretchLabState, StretchRecor
 export { formatRecordingTime, formatOutcome, deltaToMillimeters } from '../utils/motionAnalysis';
 
 const COUNTDOWN_START = 3;
+
+type AccelSample = { x: number; y: number; z: number };
 
 export function createStretchLabController(onUpdate: (state: StretchLabState) => void) {
   let state = createInitialStretchLabState();
@@ -76,6 +79,7 @@ export function createStretchLabController(onUpdate: (state: StretchLabState) =>
   const stopSensors = () => {
     accelerometerSubscription?.remove();
     accelerometerSubscription = null;
+    accelBatch.stop();
     if (Platform.OS !== 'web') {
       Accelerometer.setUpdateInterval(1000);
     }
@@ -120,22 +124,27 @@ export function createStretchLabController(onUpdate: (state: StretchLabState) =>
       delta,
       SMOOTHNESS_DECAY_FACTOR,
     );
+  };
 
+  const accelBatch = createBatchProcessor<AccelSample>((batch) => {
+    for (const { x, y, z } of batch) {
+      handleSample(x, y, z);
+    }
     state.graphSamples = smoothSignal(deltaSamples.slice(-60));
     publish();
-  };
+  }, 200);
 
   const subscribeAccelerometer = () => {
     if (Platform.OS === 'web') {
       sampleTimer = setInterval(() => {
-        handleSample(0, 0, 9.8 + Math.random() * 0.5);
+        accelBatch.push({ x: 0, y: 0, z: 9.8 + Math.random() * 0.5 });
       }, 100);
       return;
     }
 
     Accelerometer.setUpdateInterval(100);
     accelerometerSubscription = Accelerometer.addListener(({ x, y, z }) => {
-      handleSample(x, y, z);
+      accelBatch.push({ x, y, z });
     });
   };
 
@@ -152,9 +161,15 @@ export function createStretchLabController(onUpdate: (state: StretchLabState) =>
     stopSensors();
     clearSampleTimer();
     clearElapsedTimer();
-    state.recordingState = 'completed';
-    state.graphSamples = smoothSignal(deltaSamples.slice(-60));
-    publish();
+
+    void (async () => {
+      if (deltaSamples.length > 200) {
+        await yieldToEventLoop();
+      }
+      state.graphSamples = smoothSignal(deltaSamples.slice(-60));
+      state.recordingState = 'completed';
+      publish();
+    })();
   };
 
   const startRecordingInternal = () => {

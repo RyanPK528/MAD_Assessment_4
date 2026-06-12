@@ -7,6 +7,7 @@ import {
   MAX_BREATHING_PHASES,
   RECORDING_DURATION_SEC,
 } from './breathingTrainerTypes';
+import { yieldToEventLoop } from '../utils/cooperativeScheduling';
 
 export {
   BREATHING_PHASES,
@@ -30,6 +31,31 @@ export function whittakerEilersSmooth(values: number[], lambda = 8, iterations =
     }
 
     smoothed = next;
+  }
+
+  return smoothed;
+}
+
+export async function whittakerEilersSmoothAsync(
+  values: number[],
+  lambda = 8,
+  iterations = 6,
+): Promise<number[]> {
+  if (values.length < 3) {
+    return [...values];
+  }
+
+  let smoothed = [...values];
+
+  for (let k = 0; k < iterations; k += 1) {
+    const next = [...smoothed];
+
+    for (let i = 1; i < values.length - 1; i += 1) {
+      next[i] = (values[i] + lambda * (smoothed[i - 1] + smoothed[i + 1])) / (1 + 2 * lambda);
+    }
+
+    smoothed = next;
+    await yieldToEventLoop();
   }
 
   return smoothed;
@@ -115,6 +141,27 @@ export function analyzeBreathingSignal(
   durationSec = RECORDING_DURATION_SEC,
 ): BreathingRecordingMetrics {
   const smoothed = whittakerEilersSmooth(zSamples);
+  const centered = centerSignal(smoothed);
+  const breathCount = detectBreaths(centered);
+  const breathsPerMinute = computeBreathsPerMinute(breathCount, durationSec);
+  const peakAmplitude =
+    centered.length === 0 ? 0 : Math.max(...centered.map(Math.abs));
+
+  return {
+    breathCount,
+    breathsPerMinute,
+    durationSec,
+    centeredSignal: downsampleSignal(centered),
+    peakAmplitude,
+    sampleCount: zSamples.length,
+  };
+}
+
+export async function analyzeBreathingSignalAsync(
+  zSamples: number[],
+  durationSec = RECORDING_DURATION_SEC,
+): Promise<BreathingRecordingMetrics> {
+  const smoothed = await whittakerEilersSmoothAsync(zSamples);
   const centered = centerSignal(smoothed);
   const breathCount = detectBreaths(centered);
   const breathsPerMinute = computeBreathsPerMinute(breathCount, durationSec);

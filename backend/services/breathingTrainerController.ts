@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 
 import {
   analyzeBreathingSignal,
+  analyzeBreathingSignalAsync,
   analyzeBreathingSignalLive,
   computeBreathsPerMinute,
   monotonicBreathCount,
@@ -122,8 +123,8 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
     publish();
   };
 
-  const applyAnalysis = (durationSec: number) => {
-    const metrics = analyzeBreathingSignal(zSamples, durationSec);
+  const applyAnalysisAsync = async (durationSec: number) => {
+    const metrics = await analyzeBreathingSignalAsync(zSamples, durationSec);
     state.breathCount = monotonicBreathCount(state.breathCount, metrics.breathCount);
     state.breathsPerMinute = computeBreathsPerMinute(state.breathCount, durationSec);
     state.centeredSignal = metrics.centeredSignal;
@@ -135,7 +136,7 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
     liveMetricsTimer = setInterval(updateLiveMetrics, 250);
   };
 
-  const finishRecording = () => {
+  const finishRecording = async () => {
     if (state.recordingState !== 'recording') {
       return;
     }
@@ -146,7 +147,10 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
     clearLiveMetricsTimer();
 
     const durationSec = Math.min(RECORDING_DURATION_SEC, Math.max(1, state.elapsedSec));
-    applyAnalysis(durationSec);
+    state.recordingState = 'processing';
+    publish();
+
+    await applyAnalysisAsync(durationSec);
     state.recordingState = 'completed';
     publish();
   };
@@ -177,7 +181,7 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
       state.elapsedSec += 1;
 
       if (state.elapsedSec >= RECORDING_DURATION_SEC) {
-        finishRecording();
+        void finishRecording();
         return;
       }
 

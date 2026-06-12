@@ -5,7 +5,7 @@ export const CHART_DISPLAY_SAMPLES = 60;
 
 export type BreathingPhaseKind = 'rest' | 'post-exercise-1' | 'post-exercise-2';
 
-export type BreathingRecordingState = 'idle' | 'countdown' | 'recording' | 'completed';
+export type BreathingRecordingState = 'idle' | 'countdown' | 'recording' | 'processing' | 'completed';
 
 export interface BreathingPhaseDefinition {
   attemptNumber: 1 | 2 | 3;

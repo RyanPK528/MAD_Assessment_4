@@ -16,9 +16,19 @@ import {
   ensureSyncQueueInitialized,
   getDueSyncRecords,
   markRecordFailed,
+  markRecordRetry,
   markRecordSynced,
   type SyncRecord,
 } from '@/services/sqliteService';
+
+const SYNC_BACKOFF_MS = [30_000, 60_000, 120_000] as const;
+
+function computeSyncBackoffMs(createdAt: number): number {
+  const ageSec = Math.max(0, (Date.now() - createdAt) / 1000);
+  if (ageSec < 60) return SYNC_BACKOFF_MS[0];
+  if (ageSec < 180) return SYNC_BACKOFF_MS[1];
+  return SYNC_BACKOFF_MS[2];
+}
 
 const GROUPS_COLLECTION = 'groups';
 const USERS_COLLECTION = 'users';
@@ -95,6 +105,23 @@ export async function syncPendingResults(): Promise<number> {
       return 0;
     }
 
+    const groupRef = doc(db, GROUPS_COLLECTION, groupId);
+    const groupSnap = await getDoc(groupRef);
+    const groupData = groupSnap.exists() ? groupSnap.data() : null;
+    const baseCompletedCount =
+      typeof groupData?.completedActivitiesCount === 'number' ? groupData.completedActivitiesCount : 0;
+
+    const knownActivityIds = new Set<string>();
+    const existingResults = groupData?.activityResults;
+    if (Array.isArray(existingResults)) {
+      for (const entry of existingResults) {
+        if (entry && typeof entry === 'object' && typeof (entry as ActivityResultPayload).activityId === 'string') {
+          knownActivityIds.add((entry as ActivityResultPayload).activityId);
+        }
+      }
+    }
+
+    let runningCompletedCount = baseCompletedCount;
     let synced = 0;
 
     for (const record of records) {
@@ -109,10 +136,11 @@ export async function syncPendingResults(): Promise<number> {
           continue;
         }
 
-        const groupRef = doc(db, GROUPS_COLLECTION, groupId);
-        const completedIds = await getGroupCompletedActivityIds(groupId);
-        const safeCompletedIds = Array.isArray(completedIds) ? completedIds : [];
-        const isNewActivity = !safeCompletedIds.includes(payload.activityId);
+        const isNewActivity = !knownActivityIds.has(payload.activityId);
+        if (isNewActivity) {
+          knownActivityIds.add(payload.activityId);
+          runningCompletedCount += 1;
+        }
 
         await updateDoc(groupRef, {
           activityResults: arrayUnion({
@@ -123,7 +151,7 @@ export async function syncPendingResults(): Promise<number> {
           }),
           ...(isNewActivity
             ? {
-                completedActivitiesCount: safeCompletedIds.length + 1,
+                completedActivitiesCount: runningCompletedCount,
                 lastProgressUpdatedAt: serverTimestamp(),
               }
             : {}),
@@ -133,7 +161,8 @@ export async function syncPendingResults(): Promise<number> {
         synced += 1;
       } catch {
         try {
-          await markRecordFailed(record.id);
+          const backoffMs = computeSyncBackoffMs(record.createdAt);
+          await markRecordRetry(record.id, backoffMs);
         } catch {
           // ignore mark failure
         }
