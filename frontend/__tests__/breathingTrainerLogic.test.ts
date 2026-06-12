@@ -6,11 +6,17 @@ import {
   buildPhaseResult,
   buildSubmissionPayload,
   centerSignal,
+  computeAccelMagnitude,
   computeBreathsPerMinute,
+  countNewBreathPeaks,
+  detectBreathCycles,
   detectBreaths,
   downsampleSignal,
   evaluateBreathingPrediction,
+  filterBreathingMotionSamples,
+  findBreathPeakIndices,
   getOverallProgress,
+  highPassMovingBaseline,
   monotonicBreathCount,
   validateFinalSubmission,
   whittakerEilersSmooth,
@@ -33,6 +39,46 @@ function buildSyntheticBreathSignal(breathCount: number, samplesPerBreath = 10):
   return values;
 }
 
+function buildRippleExpansionFiltered(): number[] {
+  const values = Array.from({ length: 40 }, () => 0);
+
+  const addPeak = (center: number, height: number) => {
+    values[center - 1] = height * 0.35;
+    values[center] = height;
+    values[center + 1] = height * 0.35;
+  };
+
+  addPeak(10, 1);
+  addPeak(15, 0.9);
+  addPeak(20, 0.82);
+
+  return whittakerEilersSmooth(values);
+}
+
+function buildSmoothUpDownMagnitude(
+  cycleSamples = 35,
+  amplitude = 0.15,
+  breathCount = 1,
+  restSamples = 10,
+): number[] {
+  const values: number[] = [];
+
+  for (let breath = 0; breath < breathCount; breath += 1) {
+    for (let i = 0; i < cycleSamples; i += 1) {
+      const phase = i / Math.max(1, cycleSamples - 1);
+      values.push(9.8 + Math.sin(phase * Math.PI) * amplitude);
+    }
+
+    if (breath < breathCount - 1) {
+      for (let i = 0; i < restSamples; i += 1) {
+        values.push(9.8);
+      }
+    }
+  }
+
+  return values;
+}
+
 describe('breathingTrainerLogic', () => {
   describe('signal processing', () => {
     it('smooths noisy values without changing length', () => {
@@ -47,10 +93,24 @@ describe('breathingTrainerLogic', () => {
       expect(mean).toBeCloseTo(0, 5);
     });
 
+    it('computes accelerometer magnitude from x,y,z', () => {
+      expect(computeAccelMagnitude(3, 4, 0)).toBe(5);
+    });
+
+    it('highPassMovingBaseline removes slow drift from magnitude samples', () => {
+      const drift = Array.from({ length: 40 }, (_, index) => 9.8 + index * 0.01);
+      const oscillation = drift.map((value, index) => value + Math.sin(index / 3) * 0.05);
+      const filtered = highPassMovingBaseline(oscillation, 10);
+      const tailMean =
+        filtered.slice(-10).reduce((sum, value) => sum + value, 0) / 10;
+
+      expect(Math.abs(tailMean)).toBeLessThan(0.2);
+    });
+
     it('detects peaks in synthetic breathing signal', () => {
-      const signal = buildSyntheticBreathSignal(4);
-      const centered = centerSignal(whittakerEilersSmooth(signal));
-      expect(detectBreaths(centered)).toBeGreaterThanOrEqual(3);
+      const signal = buildSyntheticBreathSignal(4, 25);
+      const filtered = filterBreathingMotionSamples(signal);
+      expect(detectBreathCycles(filtered)).toBeGreaterThanOrEqual(3);
     });
 
     it('computes breaths per minute from count and duration', () => {
@@ -63,15 +123,89 @@ describe('breathingTrainerLogic', () => {
       expect(monotonicBreathCount(0, 1)).toBe(1);
     });
 
-    it('keeps breath count stable when re-analysis detects fewer peaks', () => {
-      const shortSignal = buildSyntheticBreathSignal(4);
-      const longSignal = [...shortSignal, ...Array.from({ length: 30 }, () => 0.01)];
-      const shortCentered = centerSignal(whittakerEilersSmooth(shortSignal));
-      const longCentered = centerSignal(whittakerEilersSmooth(longSignal));
-      const earlierCount = detectBreaths(shortCentered);
-      const laterCount = detectBreaths(longCentered);
-      const displayed = monotonicBreathCount(earlierCount, laterCount);
-      expect(displayed).toBeGreaterThanOrEqual(earlierCount);
+    it('live analysis matches sync final analysis for the same signal and duration', () => {
+      const signal = buildSyntheticBreathSignal(5);
+      const live = analyzeBreathingSignalLive(signal, 30);
+      const finalMetrics = analyzeBreathingSignal(signal, 30);
+
+      expect(live.breathCount).toBe(finalMetrics.breathCount);
+      expect(live.breathsPerMinute).toBe(finalMetrics.breathsPerMinute);
+    });
+
+    it('detects more weak breath peaks at 0.10 threshold than at 0.15', () => {
+      const weakSignal = buildSyntheticBreathSignal(4).map((value) => value * 0.4);
+      const filtered = filterBreathingMotionSamples(weakSignal);
+      const sensitiveCount = detectBreathCycles(filtered, { peakThresholdRatio: 0.1 });
+      const strictCount = detectBreathCycles(filtered, { peakThresholdRatio: 0.15 });
+
+      expect(sensitiveCount).toBeGreaterThanOrEqual(strictCount);
+    });
+
+    it('merges ripple peaks in one expansion via min distance and prominence', () => {
+      const ripple = buildRippleExpansionFiltered();
+      const loosePeaks = findBreathPeakIndices(ripple, {
+        peakProminenceRatio: 0,
+        cycleProminenceRatio: 0,
+        minPeakDistanceSamples: 4,
+      });
+      const strictPeaks = findBreathPeakIndices(ripple);
+
+      expect(loosePeaks.length).toBeGreaterThan(1);
+      expect(strictPeaks.length).toBe(1);
+    });
+
+    it('countNewBreathPeaks adds at most one breath for a ripple cluster per scan', () => {
+      const ripple = buildRippleExpansionFiltered();
+      const incremental = countNewBreathPeaks(ripple, Number.NEGATIVE_INFINITY);
+
+      expect(incremental.newPeaks).toBe(1);
+      expect(
+        countNewBreathPeaks(ripple, incremental.lastPeakIndex).newPeaks,
+      ).toBe(0);
+    });
+
+    it('counts one breath for a smooth up-down magnitude cycle', () => {
+      const motion = buildSmoothUpDownMagnitude(35, 0.15, 1);
+      const filtered = filterBreathingMotionSamples(motion);
+      const peaks = findBreathPeakIndices(filtered);
+
+      expect(peaks.length).toBe(1);
+      expect(detectBreathCycles(filtered)).toBe(1);
+      expect(countNewBreathPeaks(filtered, Number.NEGATIVE_INFINITY).newPeaks).toBe(1);
+    });
+
+    it('counts three breaths for three up-down magnitude cycles', () => {
+      const motion = buildSmoothUpDownMagnitude(35, 0.15, 3, 20);
+      let lastIndex = Number.NEGATIVE_INFINITY;
+      let totalPeaks = 0;
+
+      for (let end = 10; end <= motion.length; end += 10) {
+        const chunk = filterBreathingMotionSamples(motion.slice(0, end));
+        const result = countNewBreathPeaks(chunk, lastIndex);
+        totalPeaks += result.newPeaks;
+        if (result.newPeaks > 0) {
+          lastIndex = result.lastPeakIndex;
+        }
+      }
+
+      expect(totalPeaks).toBe(3);
+    });
+
+    it('incremental up-down cycle ticks accumulate to one breath', () => {
+      const motion = buildSmoothUpDownMagnitude(35, 0.15, 1);
+      let lastIndex = Number.NEGATIVE_INFINITY;
+      let totalPeaks = 0;
+
+      for (let end = 5; end <= motion.length; end += 5) {
+        const chunk = filterBreathingMotionSamples(motion.slice(0, end));
+        const result = countNewBreathPeaks(chunk, lastIndex);
+        totalPeaks += result.newPeaks;
+        if (result.newPeaks > 0) {
+          lastIndex = result.lastPeakIndex;
+        }
+      }
+
+      expect(totalPeaks).toBe(1);
     });
 
     it('downsamples long signals to target length', () => {
@@ -79,7 +213,7 @@ describe('breathingTrainerLogic', () => {
       expect(downsampled).toHaveLength(60);
     });
 
-    it('analyzes z-axis samples into recording metrics', () => {
+    it('analyzes motion magnitude samples into recording metrics', () => {
       const metrics = analyzeBreathingSignal(buildSyntheticBreathSignal(5), 30);
       expect(metrics.durationSec).toBe(30);
       expect(metrics.breathCount).toBeGreaterThan(0);

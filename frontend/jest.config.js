@@ -5,5 +5,6 @@ module.exports = {
   // Backend tests import from ../backend; babel-injected @babel/runtime must resolve via frontend/node_modules
   moduleNameMapper: {
     '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
+    '^expo-sensors$': '<rootDir>/__tests__/mocks/expo-sensors.ts',
   },
 };

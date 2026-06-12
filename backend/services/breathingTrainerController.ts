@@ -5,15 +5,19 @@ import { Platform } from 'react-native';
 import {
   analyzeBreathingSignal,
   analyzeBreathingSignalAsync,
-  analyzeBreathingSignalLive,
+  buildAuthoritativeMetrics,
+  computeAccelMagnitude,
   computeBreathsPerMinute,
-  monotonicBreathCount,
+  countNewBreathPeaks,
+  downsampleSignal,
+  filterBreathingMotionSamples,
   RECORDING_DURATION_SEC,
   START_COUNTDOWN_SEC,
 } from './breathingTrainerLogic';
 import {
   BREATHING_PHASES,
   BreathingLabState,
+  BreathingRecordingMetrics,
   createInitialBreathingLabState,
 } from './breathingTrainerTypes';
 
@@ -21,6 +25,7 @@ export {
   buildMemberAttempt,
   buildPhaseResult,
   buildSubmissionPayload,
+  computeAccelMagnitude,
   evaluateBreathingPrediction,
   formatBreathingOutcome,
   getOverallProgress,
@@ -57,7 +62,17 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
   let elapsedTimer: ReturnType<typeof setInterval> | null = null;
   let sampleTimer: ReturnType<typeof setInterval> | null = null;
   let liveMetricsTimer: ReturnType<typeof setInterval> | null = null;
-  let zSamples: number[] = [];
+  let motionSamples: number[] = [];
+  let peakBreathCount = 0;
+  let lastCountedPeakSampleIndex = Number.NEGATIVE_INFINITY;
+  let finalMetrics: BreathingRecordingMetrics | null = null;
+
+  const applyMetricsToState = (metrics: BreathingRecordingMetrics, durationSec: number) => {
+    state.breathCount = metrics.breathCount;
+    state.breathsPerMinute = metrics.breathsPerMinute;
+    state.centeredSignal = metrics.centeredSignal;
+    state.elapsedSec = durationSec;
+  };
 
   const publish = () => {
     onUpdate({
@@ -103,32 +118,52 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
   };
 
   const resetRecordingMetrics = () => {
-    zSamples = [];
+    motionSamples = [];
+    peakBreathCount = 0;
+    lastCountedPeakSampleIndex = Number.NEGATIVE_INFINITY;
+    finalMetrics = null;
     state.elapsedSec = 0;
     state.breathCount = 0;
     state.breathsPerMinute = 0;
     state.centeredSignal = [];
   };
 
+  const refreshPeakBreathCount = (durationSec: number) => {
+    if (motionSamples.length === 0) {
+      return;
+    }
+
+    const filtered = filterBreathingMotionSamples(motionSamples);
+    const { newPeaks, lastPeakIndex } = countNewBreathPeaks(
+      filtered,
+      lastCountedPeakSampleIndex,
+    );
+
+    if (newPeaks > 0) {
+      peakBreathCount += newPeaks;
+      lastCountedPeakSampleIndex = lastPeakIndex;
+    }
+
+    state.breathCount = peakBreathCount;
+    state.breathsPerMinute = computeBreathsPerMinute(peakBreathCount, durationSec);
+    state.centeredSignal = downsampleSignal(filtered);
+  };
+
   const updateLiveMetrics = () => {
-    if (zSamples.length === 0) {
+    if (motionSamples.length === 0) {
       return;
     }
 
     const durationSec = Math.max(1, state.elapsedSec);
-    const metrics = analyzeBreathingSignalLive(zSamples, durationSec);
-    state.breathCount = monotonicBreathCount(state.breathCount, metrics.breathCount);
-    state.breathsPerMinute = computeBreathsPerMinute(state.breathCount, durationSec);
-    state.centeredSignal = metrics.centeredSignal;
+    refreshPeakBreathCount(durationSec);
     publish();
   };
 
   const applyAnalysisAsync = async (durationSec: number) => {
-    const metrics = await analyzeBreathingSignalAsync(zSamples, durationSec);
-    state.breathCount = monotonicBreathCount(state.breathCount, metrics.breathCount);
-    state.breathsPerMinute = computeBreathsPerMinute(state.breathCount, durationSec);
-    state.centeredSignal = metrics.centeredSignal;
-    state.elapsedSec = durationSec;
+    refreshPeakBreathCount(durationSec);
+    const chartMetrics = await analyzeBreathingSignalAsync(motionSamples, durationSec);
+    finalMetrics = buildAuthoritativeMetrics(chartMetrics, peakBreathCount, durationSec);
+    applyMetricsToState(finalMetrics, durationSec);
   };
 
   const startLiveMetricsTimer = () => {
@@ -158,15 +193,15 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
   const subscribeAccelerometer = () => {
     if (Platform.OS === 'web') {
       sampleTimer = setInterval(() => {
-        const phase = zSamples.length / 10;
-        zSamples.push(Math.sin(phase) * 0.4);
+        const phase = motionSamples.length / 10;
+        motionSamples.push(Math.sin(phase) * 0.4 + 9.8);
       }, 100);
       return;
     }
 
     Accelerometer.setUpdateInterval(100);
-    accelerometerSubscription = Accelerometer.addListener(({ z }) => {
-      zSamples.push(z);
+    accelerometerSubscription = Accelerometer.addListener(({ x, y, z }) => {
+      motionSamples.push(computeAccelMagnitude(x, y, z));
     });
   };
 
@@ -225,6 +260,10 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
     clearElapsedTimer();
     clearSampleTimer();
     clearLiveMetricsTimer();
+    motionSamples = [];
+    peakBreathCount = 0;
+    lastCountedPeakSampleIndex = Number.NEGATIVE_INFINITY;
+    finalMetrics = null;
     state = createInitialBreathingLabState();
     state.phaseIndex = Math.max(0, Math.min(phaseIndex, BREATHING_PHASES.length - 1));
     publish();
@@ -252,8 +291,13 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
   };
 
   const getRecordingMetrics = () => {
+    if (finalMetrics) {
+      return finalMetrics;
+    }
+
     const durationSec = Math.min(RECORDING_DURATION_SEC, Math.max(1, state.elapsedSec));
-    return analyzeBreathingSignal(zSamples, durationSec);
+    const chartMetrics = analyzeBreathingSignal(motionSamples, durationSec);
+    return buildAuthoritativeMetrics(chartMetrics, peakBreathCount, durationSec);
   };
 
   const dispose = () => {
@@ -266,7 +310,7 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
 
   publish();
 
-  return {
+  const controller = {
     startCountdown,
     finishRecording,
     preparePhase,
@@ -279,4 +323,36 @@ export function createBreathingTrainerController(onUpdate: (state: BreathingLabS
     }),
     dispose,
   };
+
+  if (process.env.NODE_ENV === 'test') {
+    return {
+      ...controller,
+      __testSetSamples: (samples: number[], elapsedSec: number) => {
+        motionSamples = [...samples];
+        peakBreathCount = 0;
+        lastCountedPeakSampleIndex = Number.NEGATIVE_INFINITY;
+        finalMetrics = null;
+        state.elapsedSec = elapsedSec;
+        state.recordingState = 'recording';
+      },
+      __testAppendSamples: (samples: number[], elapsedSec: number) => {
+        motionSamples.push(...samples);
+        state.elapsedSec = elapsedSec;
+      },
+      __testTickLiveMetrics: () => {
+        updateLiveMetrics();
+      },
+      __testSetPeakBreathCount: (count: number) => {
+        peakBreathCount = count;
+        const filtered = filterBreathingMotionSamples(motionSamples);
+        lastCountedPeakSampleIndex =
+          filtered.length > 0 ? filtered.length - 1 : Number.NEGATIVE_INFINITY;
+        state.breathCount = count;
+        state.breathsPerMinute = computeBreathsPerMinute(count, Math.max(1, state.elapsedSec));
+      },
+      __testGetPeakBreathCount: () => peakBreathCount,
+    };
+  }
+
+  return controller;
 }
