@@ -81,323 +81,98 @@ StemmLab/
 │   ├── services/
 │   └── utils/                   # motionAnalysis, cooperativeScheduling, …
 ├── firestore.rules
+├── TECHNICAL_IMPLEMENTATION.md  # Requirement-by-requirement technical reference
 └── README.md
 ```
 
+## Key Features
+
+- **Team-based auth** — one Firebase account per team, shared across members
+- **Seven STEMM activities** — Engineering: Parachute Drop, Sound Pollution, Hand Fan, Earthquake Structure; Health: Human Performance, Reaction Board, Breathing Trainer
+- **Grade-aware leaderboard** — teams ranked by activities completed, filtered by grade level
+- **Offline submit queue** — SQLite persistence with background and foreground sync
+- **Reflection and self-rating** — every attempt includes written reflection and 1–5 self-rating
+- **Light/dark theme** — toggle in Settings
+
 ---
 
-## Technical Implementation
+## Architecture at a Glance
 
-### Firebase Authentication
-
-STEMM Lab uses one Firebase Auth email/password account per **team** (not per individual student). Registration in `[frontend/services/authService.ts](frontend/services/authService.ts)` calls `createUserWithEmailAndPassword`, then runs a Firestore transaction to create linked `users/{uid}` and `groups/{groupId}` documents atomically. Login in `[frontend/app/(auth)/login.tsx](frontend/app/(auth)`/login.tsx) uses `signInWithEmailAndPassword`, loads the team profile, and navigates to the Dashboard.
-
-Session persistence on native platforms uses `initializeAuth` with `getReactNativePersistence(AsyncStorage)` in `[frontend/config/firebaseNative.ts](frontend/config/firebaseNative.ts)`, so teams remain signed in across app restarts. Configuration is loaded from `EXPO_PUBLIC_FIREBASE_`* environment variables via `[frontend/app.config.js](frontend/app.config.js)`. Dashboard and Leaderboard subscribe to `onAuthStateChanged` to reload stats when the session changes.
-
-Each group receives a random 6-character alphanumeric **Team ID** (`teamDiscriminatorId`) at registration, generated with Firestore collision checking in `[frontend/utils/groupDiscriminator.ts](frontend/utils/groupDiscriminator.ts)` and displayed on the Settings screen.
-
-### Cloud Firestore
-
-Cloud Firestore is the authoritative cloud database for team profiles, activity results, and leaderboard rankings.
-
-
-| Collection         | Purpose                                                                                |
-| ------------------ | -------------------------------------------------------------------------------------- |
-| `users/{uid}`      | Team name, member first names, grade level, email, link to `groupId`                   |
-| `groups/{groupId}` | Team metadata, `memberIds`, `activityResults[]`, `completedActivitiesCount`, join code |
-
-
-Activity submissions append to `groups/{groupId}.activityResults` via `arrayUnion` in `[frontend/services/activityResultService.ts](frontend/services/activityResultService.ts)`. Each attempt includes `activityId`, `attemptId`, `attemptNumber`, sensor payload, self-rating, reflection, GPS coordinates, and timestamps.
-
-The **leaderboard** queries all groups ordered by `completedActivitiesCount` descending. Tie-breaker uses `lastProgressUpdatedAt`. The Leaderboard screen shows a top-3 podium, scrollable standings, and a sticky banner with the current team's rank and completion percentage.
-
-Dashboard, Settings, and activity Submission tabs read from Firestore independently—there is no global profile store. Settings writes profile updates via `updateTeamProfile`, which updates both `users` and `groups` in a transaction.
-
-### Firebase Test Lab
-
-Automated device testing is supported via a Roboscript at `[frontend/test-lab/robo-login.json](frontend/test-lab/robo-login.json)`. The script waits for the landing screen, taps **Log in**, fills test credentials using `testID` accessibility labels on the login form (`login-email`, `login-password`, `login-submit`), and taps **Sign in** so Robo can explore post-login screens. Run against a release APK via the Firebase Console or `gcloud firebase test android run` with the Roboscript attached.
-
-### Device Sensors and GPS
-
-Activities read device hardware through Expo modules. A shared throttle utility in `[frontend/utils/sensorThrottler.ts](frontend/utils/sensorThrottler.ts)` sets 100 ms sampling intervals during active recording.
-
-
-| Capability    | Activities                                         | Implementation                                             |
-| ------------- | -------------------------------------------------- | ---------------------------------------------------------- |
-| Accelerometer | Hand Fan, Earthquake, Human Performance, Breathing | Motion intensity, displacement, jerk, chest Z-axis breaths |
-| Gyroscope     | Earthquake Structure only                          | Cumulative rotation during shake test                      |
-| Microphone    | Sound Pollution                                    | Live dB metering via `expo-audio`                          |
-| Camera        | Parachute Drop                                     | Optional drop landing video (`expo-camera`)                |
-| Haptics       | Earthquake, Human Performance                      | Shake simulation and jerk feedback                         |
-| GPS           | Sound Pollution (per action) + all submits         | `expo-location`                                            |
-| Torch         | —                                                  | Not implemented                                            |
-
-
-**GPS capture:** `[frontend/hooks/useActivitySubmission.ts](frontend/hooks/useActivitySubmission.ts)` auto-captures location when a team opens the Reflection Modal unless the activity already captured coordinates (Sound Pollution passes its session location explicitly). Sound Pollution also tags GPS on each logged noise action.
-
-**Maps:** The app does not embed a MapView. Sound Pollution shows a text-based zone list of coordinates and dB levels. Attempt Details (`[frontend/components/activity/AttemptDetailsScreen.tsx](frontend/components/activity/AttemptDetailsScreen.tsx)`) shows a **Location Tagged** card that opens Google Maps externally via `expo-linking`.
-
-Camera, microphone, and location permissions are requested only for activities that need them. Usage descriptions are defined in `app.config.js`.
-
-### Navigation and Screen Data Flow
-
-Expo Router file-based routes under `[frontend/app/](frontend/app/)` define the navigation structure:
-
-```
-Landing → Login/Signup → [Dashboard | Activities | Leaderboard | Settings]
-                              ↓
-                    Activity screen (Overview | Activity | Submission)
-                              ↓
-                    Attempt details (/activity/attempt/{attemptId})
-```
-
-All seven activities share `[ActivityLayout.tsx](frontend/components/activity/ActivityLayout.tsx)` with three tabs: **Overview** (catalog instructions), **Activity** (live experiment), and **Submission** (discussion + past attempts). Activity screens navigate back explicitly to the Activities list.
-
-**Data between screens:**
-
-- **Route params:** Only `attemptId` (+ optional `activityId`) when opening attempt details. The full attempt record is fetched from Firestore by ID, not passed as a serialized object.
-- **Firestore:** Each screen fetches profile and group data independently via service calls.
-- **SQLite:** Every submission writes to the local queue first, then syncs to Firestore.
-- **AsyncStorage:** Used for Firebase Auth session persistence only—not activity data.
-
-**Submit flow:** Activity tab → `useActivitySubmission.requestSubmit(data)` → GPS capture → Reflection Modal (self-rating 1–5 + written reflection) → `saveActivityAttempt()` → SQLite queue → Firestore sync → Submission tab refresh.
-
-**Theme:** Light and dark mode toggle in Settings. Theme tokens live in `constants/theme.ts` via `ThemeContext`.
-
-### Battery Monitoring
-
-The Dashboard displays the device battery level and charging state using `expo-battery` in `[frontend/services/batteryService.ts](frontend/services/batteryService.ts)`. Level and charging state are read concurrently via `Promise.all`. The badge appears in the Dashboard header. Battery data is display-only—the app does not throttle sensors or block submission based on charge level.
-
-### Parallel Programming
-
-React Native runs JavaScript on a **single main thread** (Hermes on mobile). There are no Web Workers on iOS/Android, so STEMM Lab uses **cooperative parallel patterns**—batching, concurrent I/O, and yielding to the event loop—rather than multi-core CPU threads. That keeps sensor-heavy activities and screen loads responsive without blocking touch and animation.
-
-#### Concurrent I/O (`Promise.all`)
-
-Independent async operations that do not depend on each other's results run together to reduce screen load time:
-
-
-| Screen       | Parallel calls                                           |
-| ------------ | -------------------------------------------------------- |
-| Dashboard    | `fetchCurrentGroupStats()` + `fetchLeaderboardEntries()` |
-| Leaderboard  | `fetchLeaderboardEntries()` + `fetchCurrentGroupStats()` |
-| Settings     | `getUserProfile(uid)` + `fetchGroupForUser(uid)`         |
-| Battery hook | `getBatteryLevelAsync()` + `getBatteryStateAsync()`      |
-
-
-This is **concurrent waiting** on network/storage, not multi-core CPU parallelism.
-
-#### Cooperative scheduling (sensor and analysis workloads)
-
-Core utilities live in `[backend/utils/cooperativeScheduling.ts](backend/utils/cooperativeScheduling.ts)` and are re-exported from `[frontend/services/parallelProcessingService.ts](frontend/services/parallelProcessingService.ts)` for the app layer.
-
-
-| Function                 | Purpose                                                            |
-| ------------------------ | ------------------------------------------------------------------ |
-| `createBatchProcessor()` | Buffer high-frequency events and flush on a timer (default 200 ms) |
-| `yieldToEventLoop()`     | Pause between heavy loop iterations so the UI can render           |
-| `processInChunks()`      | Process arrays in slices with a yield between chunks               |
-| `runWithConcurrency()`   | Cap how many async tasks run at once                               |
-| `measureAsync()`         | Profile async operation duration (dev/profiling)                   |
-
-
-
-| Use case                         | Mechanism                                                                                                                                                                                                                    | Key file / function                                                                                                                                                                                                                                  |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Human Performance accelerometer  | Samples arrive ~10 Hz; the listener only `push()`es into a batch processor; sparkline and metrics update every **200 ms** instead of every sample                                                                            | `[backend/services/humanPerformanceService.ts](backend/services/humanPerformanceService.ts)` — `createBatchProcessor`, `accelBatch`                                                                                                                  |
-| Breathing Trainer final analysis | After 30 s recording, ~300 Z-axis samples pass through Whittaker smoothing (6 iterations). `whittakerEilersSmoothAsync()` calls `yieldToEventLoop()` between iterations; UI shows **“Analyzing…”** during `processing` state | `[backend/services/breathingTrainerLogic.ts](backend/services/breathingTrainerLogic.ts)` — `analyzeBreathingSignalAsync()`; `[backend/services/breathingTrainerController.ts](backend/services/breathingTrainerController.ts)` — `finishRecording()` |
-| Offline sync flush               | One Firestore `getDoc` for the group before the upload loop; a local `Set` tracks completed activity IDs as rows sync. **Writes stay sequential** per group to avoid Firestore `arrayUnion` races                            | `[frontend/services/activityResultService.ts](frontend/services/activityResultService.ts)` — `syncPendingResults()`                                                                                                                                  |
-
+The Expo Router UI lives in `frontend/app/`. Shared business logic and models sit in `backend/` (mirrored by many frontend services and used in Jest tests). Firestore is the cloud source of truth; SQLite holds a pending sync queue when offline.
 
 ```mermaid
-sequenceDiagram
-  participant Sensor as Accelerometer_10Hz
-  participant Batch as createBatchProcessor
-  participant UI as React_state
-
-  Sensor->>Batch: push sample
-  Note over Batch: flush every 200ms
-  Batch->>UI: single publish with sparkline
+flowchart LR
+  UI[frontend/app] --> Services[frontend/services]
+  Services --> Backend[backend/services]
+  Services --> SQLite[expo-sqlite queue]
+  Services --> Firestore[Firebase Firestore]
+  SQLite -->|syncPendingResults| Firestore
 ```
 
 
 
-### Background Tasks (Task Manager / Work Manager)
+---
 
-STEMM Lab uses `**expo-task-manager**` to define a background job and `**expo-background-fetch**` to let the OS wake the app periodically. On Android this maps to WorkManager-style deferred work; on iOS it uses background fetch with `UIBackgroundModes: ['fetch']` in `[frontend/app.config.js](frontend/app.config.js)`.
-
-**Canonical implementation:** `[frontend/services/backgroundTaskService.ts](frontend/services/backgroundTaskService.ts)` (registered from `[frontend/app/_layout.tsx](frontend/app/_layout.tsx)`). There is no separate backend task module—the live task name is `STEMM_LAB_BACKGROUND_SYNC`.
-
-#### Why it matters
-
-Teams often submit in gyms or outdoors without Wi‑Fi. Attempts are safe in SQLite, but Firestore (Submission tab, Leaderboard) only updates after `syncPendingResults()`. Background tasks and foreground sync reduce “my submission is not showing” without requiring a manual pull-to-refresh.
-
-#### Key functions
-
-
-| Function                                          | File                       | Role                                                                            |
-| ------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------- |
-| `TaskManager.defineTask(BACKGROUND_SYNC_TASK, …)` | `backgroundTaskService.ts` | Defines the handler the OS invokes                                              |
-| `registerBackgroundSync()`                        | `backgroundTaskService.ts` | Registers with Background Fetch (~15 min minimum interval, `startOnBoot: true`) |
-| `registerForegroundSyncListener()`                | `backgroundTaskService.ts` | `AppState` → `active` triggers sync when user returns to the app                |
-| `initializeBackgroundSync()`                      | `backgroundTaskService.ts` | Called from `_layout.tsx` after SQLite init                                     |
-| `syncPendingResults()`                            | `activityResultService.ts` | Reads due queue rows, pushes to Firestore, marks synced or retries              |
-| `getPendingSyncCount()`                           | `sqliteService.native.ts`  | Powers Dashboard “uploads pending” badge                                        |
-
-
-#### Sync triggers
-
-
-| Trigger                   | Behavior                                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| App launch                | `_layout.tsx` → `ensureSyncQueueInitialized()` → `syncPendingResults()`                                           |
-| App foreground            | `AppState` changes to `active` → `syncPendingResults()`                                                           |
-| OS background fetch       | Task `STEMM_LAB_BACKGROUND_SYNC` runs → `syncPendingResults()`; local notification if one or more attempts synced |
-| Dashboard pull-to-refresh | Sync then reload stats                                                                                            |
-| After submit              | `saveActivityAttempt()` queues SQLite row then calls sync immediately                                             |
-
-
-```mermaid
-sequenceDiagram
-  participant User
-  participant App
-  participant SQLite
-  participant OS as BackgroundFetch
-  participant Firestore
-
-  User->>App: Submit offline
-  App->>SQLite: INSERT pending row
-  User->>App: Background app
-  OS->>App: STEMM_LAB_BACKGROUND_SYNC
-  App->>Firestore: syncPendingResults
-  App->>SQLite: mark synced
-  User->>App: Foreground AppState active
-  App->>Firestore: sync again if pending
-```
-
-
-
-#### Retry and user feedback
-
-Failed sync attempts are re-queued as `pending` with backoff via `dueTimestamp` (30 s → 60 s → 120 s) using `markRecordRetry()` instead of staying permanently `failed`. The Dashboard shows a pending upload badge when `getPendingSyncCount() > 0`.
-
-### Notifications
-
-`[frontend/services/notificationService.ts](frontend/services/notificationService.ts)` uses `expo-notifications`. On app launch, `[frontend/app/_layout.tsx](frontend/app/_layout.tsx)` calls `registerForNotifications()` to request permission and create the Android notification channel `stemm-lab`. After a successful activity submission, `[frontend/hooks/useActivitySubmission.ts](frontend/hooks/useActivitySubmission.ts)` schedules a local notification ("Activity Submitted!") approximately one second later.
-
-In Expo Go (SDK 53+), where native push is unavailable, the service falls back to `Alert.alert` with the same message. Full notification support requires a development build or release APK.
-
-### Advertisements
-
-`[frontend/services/adService.tsx](frontend/services/adService.tsx)` renders an `AdBannerView` on the Dashboard using a `react-native-webview` that loads static HTML styled as a sponsor placeholder ("STEMM Lab Sponsor"). This works in Expo Go without AdMob SDK setup. The banner is hidden on web. Native Google AdMob (`react-native-google-mobile-ads`) is not integrated; `useInterstitialAd()` is a stub for future use.
-
-### SQLite Offline Storage
-
-Before sending results to Firestore, every submission is saved locally in SQLite via `expo-sqlite` (`[frontend/services/sqliteService.native.ts](frontend/services/sqliteService.native.ts)`). Database file: `stemm_lab_offline.db`. Table: `offline_sync_queue`.
-
-
-| Column                   | Purpose                          |
-| ------------------------ | -------------------------------- |
-| `payload`                | JSON-serialized attempt data     |
-| `status`                 | `pending`, `synced`, or `failed` |
-| `latitude`, `longitude`  | Optional GPS at queue time       |
-| `createdAt`, `updatedAt` | Timestamps for ordering/retries  |
-| `dueTimestamp`           | Optional deferred sync           |
-
-
-SQLite is a **sync queue**, not a full offline replica of Firestore. On web, an in-memory fallback in `[frontend/services/sqliteService.web.ts](frontend/services/sqliteService.web.ts)` provides the same API.
-
-**Submission pipeline:**
-
-```mermaid
-sequenceDiagram
-  participant User
-  participant App
-  participant SQLite
-  participant Firestore
-
-  User->>App: Submit attempt with reflection
-  App->>SQLite: INSERT pending record
-  App->>Firestore: syncPendingResults
-  alt Online and authenticated
-    Firestore-->>App: arrayUnion activityResults
-    App->>SQLite: mark synced
-  else Offline or error
-    SQLite-->>App: stays pending
-  end
-```
-
-
-
-1. **Validate** — self-rating (1–5) and reflection text are checked.
-2. **Queue locally** — `saveActivityAttempt()` in `[frontend/services/activityResultService.ts](frontend/services/activityResultService.ts)` writes a row with status `pending`.
-3. **Sync immediately** — `syncPendingResults()` runs right after queuing.
-4. **Push to Firestore** — pending records append to `groups/{groupId}.activityResults` via `arrayUnion`. First submission per activity increments `completedActivitiesCount`.
-5. **Mark complete** — success updates the queue row to `synced`; failure leaves it `pending` for retry.
-
-Sync also runs on app launch (`RootLayout`), Dashboard/Leaderboard pull-to-refresh, and optionally via background fetch when registered.
-
-### Firestore Security Rules
-
-Rules in `[firestore.rules](firestore.rules)` enforce server-side authorization:
-
-
-| Collection         | Policy                                                                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `users/{userId}`   | Users read/write only their own profile; creation validates team name, members, and grade                                              |
-| `groups/{groupId}` | Authenticated read (for leaderboard); create requires creator as first member or `isSeedData` flag; update restricted to group members |
-| All other paths    | Denied by default                                                                                                                      |
-
-
-Client-side practices: Firebase config loads from `EXPO_PUBLIC_`* environment variables (gitignored `.env`), not hardcoded secrets. Auth persistence uses AsyncStorage via `initializeAuth` on native platforms. Grade-level validation is enforced when joining groups.
-
-Deploy rules from the repository root: `firebase deploy --only firestore:rules`
-
-### Activity Implementation
+## Activity Implementation
 
 All seven activities follow the same architecture: a **controller service** (`createXController(onUpdate)`) holds state and sensor subscriptions; the React screen renders state and calls controller methods; submission flows through `useActivitySubmission` → Reflection Modal → SQLite → Firestore.
 
 
-| Activity                       | Category         | Key service / screen                                        |
-| ------------------------------ | ---------------- | ----------------------------------------------------------- |
-| Parachute Drop Challenge       | Engineering      | `parachuteDropService.ts`, `parachute-drop.tsx`             |
-| Sound Pollution Hunter         | Engineering      | `soundPollutionService.ts`, `sound-pollution.tsx`           |
-| Hand Fan Challenge             | Engineering      | `handFanService.ts`, `hand-fan.tsx`                         |
-| Earthquake-Resistant Structure | Engineering      | `earthquakeStructureService.ts`, `earthquake-structure.tsx` |
-| Human Performance Lab          | Health & Medical | `humanPerformanceService.ts`, `human-performance.tsx`       |
-| Reaction Board Challenge       | Health & Medical | `reactionBoardService.ts`, `reaction-board.tsx`             |
-| Breathing Pace Trainer         | Health & Medical | `breathingTrainerController.ts`, `breathing-trainer.tsx`    |
+| Activity                       | Category         | Key service / screen                                                                                                                                             |
+| ------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parachute Drop Challenge       | Engineering      | `[parachuteDropService.ts](backend/services/parachuteDropService.ts)`, `[parachute-drop.tsx](frontend/app/activity/parachute-drop.tsx)`                          |
+| Sound Pollution Hunter         | Engineering      | `[soundPollutionService.ts](frontend/services/soundPollutionService.ts)`, `[sound-pollution.tsx](frontend/app/activity/sound-pollution.tsx)`                     |
+| Hand Fan Challenge             | Engineering      | `[handFanService.ts](backend/services/handFanService.ts)`, `[hand-fan.tsx](frontend/app/activity/hand-fan.tsx)`                                                  |
+| Earthquake-Resistant Structure | Engineering      | `[earthquakeStructureService.ts](frontend/services/earthquakeStructureService.ts)`, `[earthquake-structure.tsx](frontend/app/activity/earthquake-structure.tsx)` |
+| Human Performance Lab          | Health & Medical | `[humanPerformanceService.ts](backend/services/humanPerformanceService.ts)`, `[human-performance.tsx](frontend/app/activity/human-performance.tsx)`              |
+| Reaction Board Challenge       | Health & Medical | `[reactionBoardService.ts](backend/services/reactionBoardService.ts)`, `[reaction-board.tsx](frontend/app/activity/reaction-board.tsx)`                          |
+| Breathing Pace Trainer         | Health & Medical | `[breathingTrainerController.ts](backend/services/breathingTrainerController.ts)`, `[breathing-trainer.tsx](frontend/app/activity/breathing-trainer.tsx)`        |
 
 
-#### Parachute Drop Challenge
+### Parachute Drop Challenge
 
-Teams enter drop height (m) and toy mass (kg), then run up to three prototype trials within an optional 20-minute design session timer. Each trial records fall time via a manual drop timer, optional landing video through `expo-camera`, and optional contact/bounce inputs. A physics engine in `parachuteDropService.ts` computes impact speed, acceleration, net force, drag force, and g-force from height, mass, and timed measurements. Submit payload: `{ dropHeightM, toyMassKg, sessionTimerSec, trials[] }`.
+Teams enter drop height (m) and toy mass (kg), then run up to three prototype trials within an optional 20-minute design session timer. Each trial records fall time via a manual drop timer, optional landing video through `expo-camera`, and optional contact/bounce inputs. `[parachuteDropService.ts](backend/services/parachuteDropService.ts)` computes impact speed, acceleration, net force, drag force, and g-force. Submit payload: `{ dropHeightM, toyMassKg, sessionTimerSec, trials[] }`.
 
-#### Sound Pollution Hunter
+### Sound Pollution Hunter
 
-Requires microphone and location permissions. Live dB metering polls `expo-audio` recorder metering every 100 ms and normalizes readings to a display range. Each logged action saves label, measured dB, risk classification (`safe` through `severe`), and GPS coordinates. Submit payload: `{ actions[], zones[] }`.
+Requires microphone and location permissions. Live dB metering polls `expo-audio` recorder metering every 100 ms and normalizes readings via `normalizeMeteringToDb()`. Each logged action saves label, measured dB, risk classification (`safe` through `severe`), and GPS coordinates. Submit payload: `{ actions[], zones[] }`.
 
-#### Hand Fan Challenge
+### Hand Fan Challenge
 
-Teams select material (paper or cardboard) and distance, then fan the phone while the accelerometer averages motion intensity. Bend angle and material stiffness produce an estimated force (N). Up to three designs are saved with label, prediction, and measured outcome. Submit payload: `{ designs[] }`.
+Teams select material (paper or cardboard) and distance, record bend angle, and compute estimated force (N) from material stiffness presets. Up to three designs saved with label, prediction, and outcome. Submit payload: `{ designs[] }`.
 
-#### Earthquake-Resistant Structure
+### Earthquake-Resistant Structure
 
-Up to three structural designs are saved with label, folds, pillars, and prediction. A 10-second shake test runs accelerometer and gyroscope listeners at 100 ms alongside haptic pulses. Cumulative displacement (cm) and rotation (deg) measure structural stability. Submit payload: `{ designs[] }` with shake metrics.
+Up to three structural designs with label, folds, pillars, and prediction. A 10-second shake test runs accelerometer and gyroscope listeners at 100 ms alongside haptic pulses. Cumulative displacement (cm) and rotation (deg) measure stability. Submit payload: `{ designs[] }` with shake metrics.
 
-#### Human Performance Lab
+### Human Performance Lab
 
-Three movement phases (circle/figure-8, up/down, left/right) each use a countdown then accelerometer recording at 100 ms. Jerk events above a threshold decrement a smoothness score and trigger haptic feedback. A live sparkline shows motion samples. User taps Finish per phase. Submit payload: three phase results with duration, smoothness, vibration events, and largest movement.
+Three movement phases (circle/figure-8, up/down, left/right) each use a countdown then accelerometer recording. Jerk events above a threshold decrement smoothness score and trigger haptic feedback. A live sparkline uses batched accelerometer updates (see [TECHNICAL_IMPLEMENTATION.md — Parallel Programming](TECHNICAL_IMPLEMENTATION.md#7-parallel-programming)). User taps Finish per phase. Submit payload: phase results with duration, smoothness, vibration events, and largest movement.
 
-#### Reaction Board Challenge
+### Reaction Board Challenge
 
-Loads team member names from Firestore for turn rotation. Three phases: dominant-hand tap reaction, non-dominant tap reaction, and 15-second finger tracing. Tap phases use a random 1–3 s delay before the target appears; reaction time is measured in milliseconds. Tracing accuracy is computed from finger-to-target distance. Teammates enter predictions before each member's turn. Submit payload: `{ phases[], memberTrials[] }` after all members complete all phases.
+Loads team member names from Firestore for turn rotation. Three phases: dominant-hand tap reaction, non-dominant tap reaction, and 15-second finger tracing. Tap phases use random 1–3 s delay; reaction time in milliseconds. Tracing accuracy from finger-to-target distance. Teammates enter predictions before each member's turn. Submit payload: `{ phases[], memberTrials[] }` after all members complete all phases.
 
-#### Breathing Pace Trainer
+### Breathing Pace Trainer
 
-Three conditions: breathing at rest, after jogging, after star jumps. Each phase uses a 3-second countdown then 30-second recording with the phone on the chest. Accelerometer Z-axis samples at 100 ms feed signal smoothing and peak detection to compute breath count and breaths per minute. Submit payload: `{ phases[] }` with metrics per condition.
+Three conditions: rest, after jogging, after star jumps. Each phase: 3-second countdown, 30-second chest recording. Accelerometer Z-axis at 100 ms feeds Whittaker smoothing and peak detection; async analysis shows **Analyzing…** before results (see [TECHNICAL_IMPLEMENTATION.md — Parallel Programming](TECHNICAL_IMPLEMENTATION.md#7-parallel-programming)). Submit payload: `{ memberAttempts[] }` with per-phase metrics.
 
-**Submission tab (all activities):** Shared `[ActivitySubmissionPanel](frontend/components/activity/ActivitySubmissionPanel.tsx)` shows a Discussion prompt from the activity catalog and a list of submitted attempts. Tapping an attempt opens Attempt Details with activity metadata, GPS link, activity-specific results (via `attemptResultRenderers.tsx`), and the team's reflection.
+### Submission tab (all activities)
+
+Shared `[ActivitySubmissionPanel.tsx](frontend/components/activity/ActivitySubmissionPanel.tsx)` shows a Discussion prompt from the activity catalog and a list of submitted attempts. Tapping an attempt opens Attempt Details with activity metadata, GPS link, activity-specific results via `[attemptResultRenderers.tsx](frontend/components/activity/attempt-details/attemptResultRenderers.tsx)`, and the team's reflection.
+
+---
+
+## Data Model
+
+
+| Collection         | Purpose                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `users/{uid}`      | Team name, member names, grade, email, link to group                                 |
+| `groups/{groupId}` | Team metadata, `memberIds`, embedded `activityResults[]`, `completedActivitiesCount` |
+
+
+Full schema, sync rules, and security policies are documented in [TECHNICAL_IMPLEMENTATION.md](TECHNICAL_IMPLEMENTATION.md).
 
 ---
 
@@ -422,7 +197,7 @@ Jest is configured in `frontend/jest.config.js` with the `jest-expo` preset. Cov
 npm run test:coverage
 ```
 
-**Firebase Test Lab:** `[frontend/test-lab/robo-login.json](frontend/test-lab/robo-login.json)` is a Roboscript that automates team login on a release APK. Upload the APK to Firebase Test Lab and attach the script for Robo exploration testing.
+**Firebase Test Lab:** `[frontend/test-lab/robo-login.json](frontend/test-lab/robo-login.json)` automates team login on a release APK. See [TECHNICAL_IMPLEMENTATION.md — Testing on devices](TECHNICAL_IMPLEMENTATION.md#14-testing-on-devices) for Roboscript details and `gcloud` command.
 
 ---
 
