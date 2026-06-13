@@ -27,9 +27,9 @@ describe('Earthquake Structure — Integration Test (Multi-Design Workflow)', ()
 
     // Simulate 100 sensor readings (10 seconds) with high movement
     for (let i = 0; i < 100; i++) {
-      // Simulated shaking: magnitude varies between 1.1g and 1.8g
-      const accelMag = 1.0 + Math.sin(i * 0.3) * 0.4 + 0.4;
-      const gyroMag = Math.sin(i * 0.5) * 2.0;
+      // Simulated shaking: magnitude varies between 1.3g and 2.0g (above 0.15g deadzone)
+      const accelMag = 1.0 + Math.sin(i * 0.3) * 0.5 + 0.5;
+      const gyroMag = Math.sin(i * 0.5) * 2.5;
       totalDisplacement += aggregateDisplacement(accelMag, dt);
       totalRotation += aggregateRotation(Math.abs(gyroMag), dt);
     }
@@ -47,9 +47,9 @@ describe('Earthquake Structure — Integration Test (Multi-Design Workflow)', ()
     totalDisplacement = 0;
     totalRotation = 0;
     for (let i = 0; i < 100; i++) {
-      // Less movement due to better structure (damping factor)
-      const accelMag = 1.0 + Math.sin(i * 0.3) * 0.2 + 0.1;
-      const gyroMag = Math.sin(i * 0.5) * 0.8;
+      // Less movement due to better structure (but still above deadzone)
+      const accelMag = 1.0 + Math.sin(i * 0.3) * 0.25 + 0.25;
+      const gyroMag = Math.sin(i * 0.5) * 1.2;
       totalDisplacement += aggregateDisplacement(accelMag, dt);
       totalRotation += aggregateRotation(Math.abs(gyroMag), dt);
     }
@@ -67,9 +67,9 @@ describe('Earthquake Structure — Integration Test (Multi-Design Workflow)', ()
     totalDisplacement = 0;
     totalRotation = 0;
     for (let i = 0; i < 100; i++) {
-      // Minimal movement
-      const accelMag = 1.0 + Math.sin(i * 0.3) * 0.05 + 0.02;
-      const gyroMag = Math.sin(i * 0.5) * 0.3;
+      // Minimal movement — but still above deadzone for some readings
+      const accelMag = 1.0 + Math.sin(i * 0.3) * 0.1 + 0.18;
+      const gyroMag = Math.sin(i * 0.5) * 0.6;
       totalDisplacement += aggregateDisplacement(accelMag, dt);
       totalRotation += aggregateRotation(Math.abs(gyroMag), dt);
     }

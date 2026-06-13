@@ -23,14 +23,20 @@ describe('earthquakeStructureService — Unit Tests', () => {
       expect(displacement).toBe(0);
     });
 
-    it('returns positive displacement when phone is shaken (accel > 1g)', () => {
-      // Shaking: magnitude = 1.5g → dynamic = 0.5g
+    it('returns zero for small vibrations within deadzone (phone self-vibration)', () => {
+      // 1.1g is only 0.1g above rest — below the 0.15g deadzone
+      const displacement = aggregateDisplacement(1.1, 0.1);
+      expect(displacement).toBe(0);
+    });
+
+    it('returns positive displacement when phone is shaken beyond deadzone', () => {
+      // Shaking: magnitude = 1.5g → dynamic = 0.5g, above 0.15g deadzone
       const displacement = aggregateDisplacement(1.5, 0.1);
       expect(displacement).toBeGreaterThan(0);
     });
 
-    it('returns positive displacement when accel is below 1g (free-fall direction)', () => {
-      // Below gravity: magnitude = 0.5g → |0.5 - 1.0| = 0.5g dynamic
+    it('returns positive displacement when accel is well below 1g', () => {
+      // Below gravity: magnitude = 0.5g → |0.5 - 1.0| = 0.5g, above deadzone
       const displacement = aggregateDisplacement(0.5, 0.1);
       expect(displacement).toBeGreaterThan(0);
     });
@@ -44,9 +50,14 @@ describe('earthquakeStructureService — Unit Tests', () => {
   });
 
   describe('aggregateRotation', () => {
-    it('converts gyroscope magnitude to degrees over time', () => {
-      // 1 rad/s for 1 second = 57.3°
-      const rotation = aggregateRotation(1.0, 1.0);
+    it('returns 0 for small gyro readings within deadzone', () => {
+      // 0.2 rad/s is below the 0.3 rad/s deadzone
+      expect(aggregateRotation(0.2, 1.0)).toBe(0);
+    });
+
+    it('converts gyroscope magnitude to degrees over time (above deadzone)', () => {
+      // 1.3 rad/s for 1 second: filtered = 1.3 - 0.3 = 1.0 rad/s → ~57.3°
+      const rotation = aggregateRotation(1.3, 1.0);
       expect(rotation).toBeCloseTo(57.3, 0);
     });
 

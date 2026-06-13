@@ -32,13 +32,22 @@ const GRAVITY_G = 1.0;
 export function aggregateDisplacement(accelMagG: number, dtSec: number): number {
   // Subtract resting gravity (1g), convert to m/s², compute displacement in cm
   const dynamicG = Math.abs(accelMagG - GRAVITY_G);
-  const dynamicMs2 = dynamicG * 9.81;
+  // Apply a deadzone threshold to filter out the phone's own haptic vibration
+  // Haptic motors typically produce ~0.1-0.2g of self-noise
+  const VIBRATION_DEADZONE_G = 0.15;
+  if (dynamicG < VIBRATION_DEADZONE_G) return 0;
+  const filteredG = dynamicG - VIBRATION_DEADZONE_G;
+  const dynamicMs2 = filteredG * 9.81;
   // 0.5 * a * t² gives metres; *100 → cm; *50 → UI scaling factor
   return 0.5 * dynamicMs2 * dtSec * dtSec * 100 * 50;
 }
 
 export function aggregateRotation(gyroMag: number, dtSec: number): number {
-  return Math.abs(gyroMag) * dtSec * (180 / Math.PI);
+  // Apply deadzone to filter phone's own haptic vibration noise
+  const GYRO_DEADZONE_RAD = 0.3; // ~17°/s threshold
+  if (Math.abs(gyroMag) < GYRO_DEADZONE_RAD) return 0;
+  const filtered = Math.abs(gyroMag) - GYRO_DEADZONE_RAD;
+  return filtered * dtSec * (180 / Math.PI);
 }
 
 export function rankDesigns(designs: StructureDesign[]): StructureDesign[] {
@@ -164,8 +173,13 @@ export function createEarthquakeStructureController(onUpdate: (state: Earthquake
     });
 
     hapticInterval = setInterval(() => {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    }, 200);
+      // Use notification-type vibration for stronger, more sustained earthquake effect
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // Double-tap for even more intensity
+      setTimeout(() => {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }, 80);
+    }, 150);
 
     elapsedInterval = setInterval(() => {
       state = { ...state, elapsedSec: state.elapsedSec + 1 };
