@@ -217,9 +217,11 @@ export default function BreathingTrainerScreen() {
             <ThemedText type="small" themeColor="textSecondary">
               {labState.recordingState === 'countdown'
                 ? 'Get ready'
-                : labState.recordingState === 'recording' || labState.recordingState === 'completed'
-                  ? 'Time remaining'
-                  : 'Recording duration'}
+                : labState.recordingState === 'processing'
+                  ? 'Analyzing breath signal'
+                  : labState.recordingState === 'recording' || labState.recordingState === 'completed'
+                    ? 'Time remaining'
+                    : 'Recording duration'}
             </ThemedText>
             <ThemedText type="title">
               {labState.recordingState === 'recording' || labState.recordingState === 'completed'
@@ -249,18 +251,26 @@ export default function BreathingTrainerScreen() {
 
       {showLiveMonitoring ? (
         <>
-          <ActivitySection title="Live metrics">
-            <StatCard
-              label="Breaths recorded"
-              value={String(usePlaceholderMetrics ? 0 : labState.breathCount)}
-            />
-          </ActivitySection>
+          {labState.recordingState === 'processing' ? (
+            <ActivitySection title="Analyzing">
+              <ThemedText type="body">Analyzing breathing signal…</ThemedText>
+            </ActivitySection>
+          ) : (
+            <>
+              <ActivitySection title="Live metrics">
+                <StatCard
+                  label="Breaths recorded"
+                  value={String(usePlaceholderMetrics ? 0 : labState.breathCount)}
+                />
+              </ActivitySection>
 
-          <ActivitySection title="Breathing monitor">
-            <MovementSparkline
-              values={usePlaceholderMetrics ? [] : labState.centeredSignal.map(Math.abs)}
-            />
-          </ActivitySection>
+              <ActivitySection title="Breathing monitor">
+                <MovementSparkline
+                  values={usePlaceholderMetrics ? [] : labState.centeredSignal.map(Math.abs)}
+                />
+              </ActivitySection>
+            </>
+          )}
         </>
       ) : null}
 

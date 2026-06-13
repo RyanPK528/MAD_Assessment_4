@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { ThemeProvider } from '@/components/ThemeContext';
+import '@/services/backgroundTaskService';
 import { ensureSyncQueueInitialized } from '@/services/sqliteService';
 
 export default function RootLayout() {
@@ -16,6 +17,8 @@ export default function RootLayout() {
       // Notification module unavailable
     });
 
+    let removeForegroundSync: (() => void) | undefined;
+
     void ensureSyncQueueInitialized().then(async () => {
       try {
         const { syncPendingResults } = await import('@/services/activityResultService');
@@ -23,7 +26,18 @@ export default function RootLayout() {
       } catch {
         // Firebase optional — local SQLite still works.
       }
+
+      try {
+        const { initializeBackgroundSync } = await import('@/services/backgroundTaskService');
+        removeForegroundSync = await initializeBackgroundSync();
+      } catch {
+        // Background fetch unavailable in Expo Go or when denied.
+      }
     });
+
+    return () => {
+      removeForegroundSync?.();
+    };
   }, []);
 
   return (

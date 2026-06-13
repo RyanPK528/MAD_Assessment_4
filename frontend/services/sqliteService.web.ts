@@ -83,3 +83,17 @@ export async function markRecordFailed(id: number): Promise<void> {
     record.updatedAt = Date.now();
   }
 }
+
+export async function markRecordRetry(id: number, backoffMs: number): Promise<void> {
+  const record = memoryQueue.find((entry) => entry.id === id);
+  if (record) {
+    const now = Date.now();
+    record.status = 'pending';
+    record.updatedAt = now;
+    record.dueTimestamp = now + backoffMs;
+  }
+}
+
+export async function getPendingSyncCount(): Promise<number> {
+  return memoryQueue.filter((record) => record.status === 'pending').length;
+}

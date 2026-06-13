@@ -13,15 +13,6 @@ Firebase
 
 STEMM Lab is a cross-platform mobile application built with Expo and React Native. Teams of students register a single shared account, complete seven sensor-driven STEMM challenges, and compete on a grade-aware leaderboard.
 
-Each team account stores:
-
-- Team name and member first names
-- Grade level (Year 5–10)
-- A unique 6-character alphanumeric **Team ID** (discriminator)
-- Activity completion progress synced to Firebase Firestore
-
-The app supports offline activity capture through a local SQLite queue and syncs results to the cloud when connectivity is restored. Activities use device sensors, camera, microphone, and location where appropriate.
-
 **Primary user flow**
 
 1. Sign up or log in as a team account
@@ -30,29 +21,30 @@ The app supports offline activity capture through a local SQLite queue and syncs
 4. Compare standings on the Leaderboard
 5. Manage team profile, theme, and preferences in Settings
 
+The runnable Expo app lives in `/frontend`. The `/backend` folder contains shared service logic, models, and controllers used as a reference layer and for unit tests.
+
 ---
 
 ## Technology Stack
 
 
-| Layer                     | Technology                                                |
-| ------------------------- | --------------------------------------------------------- |
-| Framework                 | Expo ~56 (managed workflow), React Native 0.85, React 19  |
-| Language                  | TypeScript ~6.0                                           |
-| Navigation                | Expo Router ~56 (file-based routing)                      |
-| Authentication & Database | Firebase JS SDK 12 (Auth, Firestore)                      |
-| Offline storage           | `expo-sqlite` (sync queue for activity results)           |
-| Sensors & hardware        | `expo-sensors`, `expo-camera`, `expo-av`, `expo-location` |
-| Background tasks          | `expo-background-fetch`, `expo-task-manager`              |
-| UI & animation            | React Context (theme), Reanimated 4, Safe Area Context    |
-| Icons                     | `expo-symbols` via cross-platform `AppIcon` wrapper       |
-| Testing                   | Jest 29, `jest-expo`                                      |
-| Linting                   | ESLint 9, `eslint-config-expo`                            |
-| Build                     | EAS Build (`eas.json`)                                    |
-| Dev tooling               | Firebase Admin SDK (standalone Firestore seed script)     |
+| Layer                     | Technology                                                                                   |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| Framework                 | Expo ~56 (managed workflow), React Native 0.85, React 19                                     |
+| Language                  | TypeScript ~6.0                                                                              |
+| Navigation                | Expo Router ~56 (file-based routing)                                                         |
+| Authentication & Database | Firebase JS SDK 12 (Auth, Firestore)                                                         |
+| Offline storage           | `expo-sqlite` (sync queue for activity results)                                              |
+| Sensors & hardware        | `expo-sensors`, `expo-camera`, `expo-audio`, `expo-location`, `expo-battery`, `expo-haptics` |
+| Notifications             | `expo-notifications`                                                                         |
+| Background tasks          | `expo-background-fetch`, `expo-task-manager`                                                 |
+| Ads                       | `react-native-webview` (placeholder banner)                                                  |
+| UI & animation            | React Context (theme), Reanimated 4, Safe Area Context                                       |
+| Icons                     | `expo-symbols` via cross-platform `AppIcon` wrapper                                          |
+| Testing                   | Jest 29, `jest-expo`                                                                         |
+| Linting                   | ESLint 9, `eslint-config-expo`                                                               |
+| Build                     | EAS Build (`eas.json`)                                                                       |
 
-
-The `/backend` folder contains shared service logic, models, and controllers used as a reference layer; the runnable Expo app lives in `/frontend`.
 
 ---
 
@@ -61,84 +53,126 @@ The `/backend` folder contains shared service logic, models, and controllers use
 ```
 StemmLab/
 ├── frontend/                    # Expo React Native application
-│   ├── app/                     # Expo Router screens
-│   │   ├── (auth)/              # Login & signup
-│   │   ├── (tabs)/              # Main tab navigation
-│   │   │   ├── dashboard.tsx
-│   │   │   ├── activities.tsx
-│   │   │   ├── leaderboard.tsx
-│   │   │   └── settings.tsx     # Team profile + theme
-│   │   └── activity/            # Individual challenge screens
-│   ├── components/              # Reusable UI (ActivityLayout, themed components)
-│   ├── config/                  # Firebase native initialization
-│   ├── constants/               # Theme tokens, activity IDs
-│   ├── hooks/                   # Theme, focus-load, activity styles
-│   ├── services/                # Auth, groups, SQLite sync, activity logic
-│   ├── utils/                   # Group discriminator generation
-│   ├── scripts/                 # Standalone dev scripts (seed-database.mjs)
-│   ├── __tests__/               # Jest unit tests
+│   ├── app/
+│   │   ├── index.tsx            # Landing
+│   │   ├── (auth)/              # login, signup
+│   │   ├── (tabs)/              # dashboard, activities, leaderboard, settings
+│   │   └── activity/            # 7 activities + attempt/[attemptId]
+│   ├── components/
+│   │   ├── activity/            # ActivityLayout, ReflectionModal, attempt-details/
+│   │   └── ui/                  # AppButton, AppCard, etc.
+│   ├── config/
+│   │   └── firebaseNative.ts    # Firebase Auth + Firestore init
+│   ├── constants/               # theme, activityCatalog, activities
+│   ├── hooks/                   # useActivitySubmission, useActivityAttempts, etc.
+│   ├── services/                # auth, sync, sensors, sqlite, ads, notifications, …
+│   ├── types/
+│   ├── utils/
+│   ├── test-lab/
+│   │   └── robo-login.json      # Firebase Test Lab Roboscript
+│   ├── __tests__/
 │   ├── app.config.js            # Expo config + env injection
-│   ├── eas.json                 # EAS build profiles
+│   ├── eas.json
 │   └── package.json
-├── backend/                     # Shared backend services & models
+├── backend/                     # Shared logic (mirrors many frontend services)
 │   ├── config/
 │   ├── controllers/
 │   ├── models/
 │   ├── services/
-│   └── tasks/
-├── firestore.rules              # Firestore security rules
+│   └── utils/                   # motionAnalysis, cooperativeScheduling, …
+├── firestore.rules
+├── TECHNICAL_IMPLEMENTATION.md  # Requirement-by-requirement technical reference
 └── README.md
 ```
 
+## Key Features
+
+- **Team-based auth** — one Firebase account per team, shared across members
+- **Seven STEMM activities** — Engineering: Parachute Drop, Sound Pollution, Hand Fan, Earthquake Structure; Health: Human Performance, Reaction Board, Breathing Trainer
+- **Grade-aware leaderboard** — teams ranked by activities completed, filtered by grade level
+- **Offline submit queue** — SQLite persistence with background and foreground sync
+- **Reflection and self-rating** — every attempt includes written reflection and 1–5 self-rating
+- **Light/dark theme** — toggle in Settings
+
 ---
 
-## Getting Started
+## Architecture at a Glance
 
-### Prerequisites
+The Expo Router UI lives in `frontend/app/`. Shared business logic and models sit in `backend/` (mirrored by many frontend services and used in Jest tests). Firestore is the cloud source of truth; SQLite holds a pending sync queue when offline.
 
-- Node.js 18+ and npm
-- [Expo Go](https://expo.dev/go) on a physical device, or Android/iOS emulator
-- A Firebase project with **Authentication (Email/Password)** and **Cloud Firestore** enabled
-
-### 1. Clone and install
-
-```bash
-git clone <repository-url>
-cd StemmLab/frontend
-npm install
+```mermaid
+flowchart LR
+  UI[frontend/app] --> Services[frontend/services]
+  Services --> Backend[backend/services]
+  Services --> SQLite[expo-sqlite queue]
+  Services --> Firestore[Firebase Firestore]
+  SQLite -->|syncPendingResults| Firestore
 ```
 
-### 2. Configure Firebase environment variables
 
-Create `frontend/.env` (this file is gitignored):
 
-```env
-EXPO_PUBLIC_FIREBASE_API_KEY=your-api-key
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
-EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
-EXPO_PUBLIC_FIREBASE_APP_ID=your-app-id
-```
+---
 
-Values are available in the Firebase Console under **Project settings → General → Your apps**.
+## Activity Implementation
 
-### 3. Deploy Firestore security rules
+All seven activities follow the same architecture: a **controller service** (`createXController(onUpdate)`) holds state and sensor subscriptions; the React screen renders state and calls controller methods; submission flows through `useActivitySubmission` → Reflection Modal → SQLite → Firestore.
 
-From the repository root:
 
-```bash
-firebase deploy --only firestore:rules
-```
+| Activity                       | Category         | Key service / screen                                                                                                                                             |
+| ------------------------------ | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Parachute Drop Challenge       | Engineering      | `[parachuteDropService.ts](backend/services/parachuteDropService.ts)`, `[parachute-drop.tsx](frontend/app/activity/parachute-drop.tsx)`                          |
+| Sound Pollution Hunter         | Engineering      | `[soundPollutionService.ts](frontend/services/soundPollutionService.ts)`, `[sound-pollution.tsx](frontend/app/activity/sound-pollution.tsx)`                     |
+| Hand Fan Challenge             | Engineering      | `[handFanService.ts](backend/services/handFanService.ts)`, `[hand-fan.tsx](frontend/app/activity/hand-fan.tsx)`                                                  |
+| Earthquake-Resistant Structure | Engineering      | `[earthquakeStructureService.ts](frontend/services/earthquakeStructureService.ts)`, `[earthquake-structure.tsx](frontend/app/activity/earthquake-structure.tsx)` |
+| Human Performance Lab          | Health & Medical | `[humanPerformanceService.ts](backend/services/humanPerformanceService.ts)`, `[human-performance.tsx](frontend/app/activity/human-performance.tsx)`              |
+| Reaction Board Challenge       | Health & Medical | `[reactionBoardService.ts](backend/services/reactionBoardService.ts)`, `[reaction-board.tsx](frontend/app/activity/reaction-board.tsx)`                          |
+| Breathing Pace Trainer         | Health & Medical | `[breathingTrainerController.ts](backend/services/breathingTrainerController.ts)`, `[breathing-trainer.tsx](frontend/app/activity/breathing-trainer.tsx)`        |
 
-### 4. Run the development server
 
-```bash
-cd frontend
-npm start
-```
+### Parachute Drop Challenge
 
-Then press `a` for Android, `i` for iOS (macOS), `w` for web, or scan the QR code with Expo Go.
+Teams enter drop height (m) and toy mass (kg), then run up to three prototype trials within an optional 20-minute design session timer. Each trial records fall time via a manual drop timer, optional landing video through `expo-camera`, and optional contact/bounce inputs. `[parachuteDropService.ts](backend/services/parachuteDropService.ts)` computes impact speed, acceleration, net force, drag force, and g-force. Submit payload: `{ dropHeightM, toyMassKg, sessionTimerSec, trials[] }`.
+
+### Sound Pollution Hunter
+
+Requires microphone and location permissions. Live dB metering polls `expo-audio` recorder metering every 100 ms and normalizes readings via `normalizeMeteringToDb()`. Each logged action saves label, measured dB, risk classification (`safe` through `severe`), and GPS coordinates. Submit payload: `{ actions[], zones[] }`.
+
+### Hand Fan Challenge
+
+Teams select material (paper or cardboard) and distance, record bend angle, and compute estimated force (N) from material stiffness presets. Up to three designs saved with label, prediction, and outcome. Submit payload: `{ designs[] }`.
+
+### Earthquake-Resistant Structure
+
+Up to three structural designs with label, folds, pillars, and prediction. A 10-second shake test runs accelerometer and gyroscope listeners at 100 ms alongside haptic pulses. Cumulative displacement (cm) and rotation (deg) measure stability. Submit payload: `{ designs[] }` with shake metrics.
+
+### Human Performance Lab
+
+Three movement phases (circle/figure-8, up/down, left/right) each use a countdown then accelerometer recording. Jerk events above a threshold decrement smoothness score and trigger haptic feedback. A live sparkline uses batched accelerometer updates (see [TECHNICAL_IMPLEMENTATION.md — Parallel Programming](TECHNICAL_IMPLEMENTATION.md#7-parallel-programming)). User taps Finish per phase. Submit payload: phase results with duration, smoothness, vibration events, and largest movement.
+
+### Reaction Board Challenge
+
+Loads team member names from Firestore for turn rotation. Three phases: dominant-hand tap reaction, non-dominant tap reaction, and 15-second finger tracing. Tap phases use random 1–3 s delay; reaction time in milliseconds. Tracing accuracy from finger-to-target distance. Teammates enter predictions before each member's turn. Submit payload: `{ phases[], memberTrials[] }` after all members complete all phases.
+
+### Breathing Pace Trainer
+
+Three conditions: rest, after jogging, after star jumps. Each phase: 3-second countdown, 30-second chest recording. Accelerometer Z-axis at 100 ms feeds Whittaker smoothing and peak detection; async analysis shows **Analyzing…** before results (see [TECHNICAL_IMPLEMENTATION.md — Parallel Programming](TECHNICAL_IMPLEMENTATION.md#7-parallel-programming)). Submit payload: `{ memberAttempts[] }` with per-phase metrics.
+
+### Submission tab (all activities)
+
+Shared `[ActivitySubmissionPanel.tsx](frontend/components/activity/ActivitySubmissionPanel.tsx)` shows a Discussion prompt from the activity catalog and a list of submitted attempts. Tapping an attempt opens Attempt Details with activity metadata, GPS link, activity-specific results via `[attemptResultRenderers.tsx](frontend/components/activity/attempt-details/attemptResultRenderers.tsx)`, and the team's reflection.
+
+---
+
+## Data Model
+
+
+| Collection         | Purpose                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `users/{uid}`      | Team name, member names, grade, email, link to group                                 |
+| `groups/{groupId}` | Team metadata, `memberIds`, embedded `activityResults[]`, `completedActivitiesCount` |
+
+
+Full schema, sync rules, and security policies are documented in [TECHNICAL_IMPLEMENTATION.md](TECHNICAL_IMPLEMENTATION.md).
 
 ---
 
@@ -163,12 +197,7 @@ Jest is configured in `frontend/jest.config.js` with the `jest-expo` preset. Cov
 npm run test:coverage
 ```
 
-A full testing write-up for assessment (Jest + Firebase Test Lab + reflection) is in [`docs/TESTING_REPORT.md`](../docs/TESTING_REPORT.md).
-
-Firebase Test Lab configs:
-
-- [`frontend/firebase-test-lab.yml`](frontend/firebase-test-lab.yml) — instrumentation scaffold (Person A example)
-- [`frontend/firebase-test-lab-robo.yml`](frontend/firebase-test-lab-robo.yml) — Robo test, Pixel 4 API 30 (Person B)
+**Firebase Test Lab:** `[frontend/test-lab/robo-login.json](frontend/test-lab/robo-login.json)` automates team login on a release APK. See [TECHNICAL_IMPLEMENTATION.md — Testing on devices](TECHNICAL_IMPLEMENTATION.md#14-testing-on-devices) for Roboscript details and `gcloud` command.
 
 ---
 
@@ -180,165 +209,6 @@ npm run lint
 ```
 
 ESLint uses the Expo flat config (`frontend/eslint.config.js`) with `eslint-config-expo`. Run lint before committing changes to catch unused variables, hook violations, and TypeScript-aware React Native issues.
-
----
-
-## Key Features
-
-### Team account authentication
-
-- One Firebase Auth account per team (not per individual student)
-- Registration captures team name, member first names, and grade level (Year 5–10)
-- Creates linked `users/{uid}` and `groups/{groupId}` documents in a Firestore transaction
-
-### Unique Team ID
-
-- Each group receives a random 6-character alphanumeric discriminator (e.g. `ST3M9X`)
-- Generated with Firestore collision checking at registration
-- Displayed on the Settings screen for reference
-
-### Seven STEMM activities
-
-Each activity uses a three-tab layout (Overview, Activity, Submission):
-
-
-| Activity                       | Category         |
-| ------------------------------ | ---------------- |
-| Parachute Drop Challenge       | Engineering      |
-| Sound Pollution Hunter         | Engineering      |
-| Hand Fan Challenge             | Engineering      |
-| Earthquake-Resistant Structure | Engineering      |
-| Human Performance Lab          | Health & Medical |
-| Reaction Board Challenge       | Health & Medical |
-| Breathing Pace Trainer         | Health & Medical |
-
-
-### Leaderboard
-
-- Teams ranked by completion percentage across all 7 challenges
-- Tie-breaker: earlier `lastProgressUpdatedAt` wins
-- Top-3 podium view plus scrollable standings
-- Sticky bottom banner showing the current team's rank, name, and progress bar
-
-### Offline sync
-
-Activity submissions are saved locally first, then pushed to Firestore when online. See [Data storage](#data-storage) for the full flow.
-
-### Theme support
-
-- Light and dark mode toggle in Settings
-- Theme tokens centralized in `constants/theme.ts` via `ThemeContext`
-
-### Navigation
-
-Main tabs: **Dashboard**, **Activities**, **Leaderboard**, **Settings**
-
-Activity screens navigate back explicitly to the Activities list (not the Dashboard).
-
----
-
-## Data storage
-
-STEMM Lab uses a **two-tier storage model**: Firebase Firestore is the cloud source of truth for team data and shared progress, while **SQLite** on the device buffers activity submissions when the network is unavailable.
-
-### Firebase (online)
-
-| Service | Role |
-| ------- | ---- |
-| **Firebase Authentication** | Team login (one email/password per team). Session persisted on device via AsyncStorage. |
-| **Cloud Firestore** | Stores team profiles, group documents, activity results, and leaderboard data. |
-
-Key Firestore collections:
-
-- **`users/{uid}`** — links an auth account to a `groupId`, plus team name, member names, and grade level.
-- **`groups/{groupId}`** — team progress, member list, and an **`activityResults`** array containing every submitted attempt (sensor data, reflection, self-rating, GPS, timestamps).
-
-The Dashboard, Leaderboard, and activity **Submission** tabs read from Firestore. Leaderboard rankings and completion percentages are derived from each group's `activityResults` and `completedActivitiesCount`.
-
-### SQLite (offline queue)
-
-On iOS and Android, the app uses **`expo-sqlite`** with a local database file `stemm_lab_offline.db`. A single table, **`offline_sync_queue`**, stores submissions waiting to reach Firestore:
-
-| Column | Purpose |
-| ------ | ------- |
-| `payload` | JSON activity attempt (activity ID, attempt data, reflection, self-rating, etc.) |
-| `status` | `pending`, `synced`, or `failed` |
-| `latitude` / `longitude` | Optional GPS captured at submit time |
-| `createdAt` / `updatedAt` | Timestamps for queue ordering and retries |
-
-SQLite is **not** a full offline copy of the app database. It is a **sync queue** so teams can submit attempts without an immediate network connection.
-
-On web, a lightweight in-memory fallback is used instead of SQLite (`sqliteService.web.ts`).
-
-### How a submission flows
-
-```mermaid
-sequenceDiagram
-  participant User
-  participant App
-  participant SQLite
-  participant Firestore
-
-  User->>App: Submit attempt with reflection
-  App->>SQLite: INSERT pending record
-  App->>Firestore: syncPendingResults
-  alt Online and authenticated
-    Firestore-->>App: arrayUnion activityResults
-    App->>SQLite: mark synced
-  else Offline or error
-    SQLite-->>App: stays pending
-  end
-```
-
-1. **Validate** — self-rating (1–5) and reflection text are checked.
-2. **Queue locally** — `saveActivityAttempt()` writes a row to `offline_sync_queue` with status `pending` (`sqliteService.native.ts`).
-3. **Sync immediately** — the app calls `syncPendingResults()` right after queuing.
-4. **Push to Firestore** — for each pending record, the sync service loads the team's `groups/{groupId}` document and appends the attempt with `arrayUnion` on `activityResults`. If this is the team's first submission for that activity, `completedActivitiesCount` is incremented.
-5. **Mark complete** — on success, the queue row is updated to `synced`; on failure, it stays `pending` (or is marked `failed` for invalid payloads).
-
-Implementation lives in [`frontend/services/activityResultService.ts`](frontend/services/activityResultService.ts) and [`frontend/services/sqliteService.native.ts`](frontend/services/sqliteService.native.ts).
-
-### When sync runs
-
-Pending records are flushed to Firestore:
-
-- **App launch** — `RootLayout` initializes the queue and calls `syncPendingResults()`.
-- **After each submission** — attempted immediately when the user submits an attempt.
-- **Dashboard / Leaderboard refresh** — pull-to-refresh triggers sync before reloading stats.
-- **Background fetch** (optional) — `backgroundTaskService.ts` can run periodic sync when the app is backgrounded.
-
-If a submission is made offline, it remains in SQLite until a later sync succeeds. Once synced, the attempt appears in the activity Submission tab and contributes to leaderboard progress.
-
-### Design rationale
-
-- **SQLite first** — guarantees the student gets confirmation that their work was saved on-device even without connectivity.
-- **Firestore second** — centralizes team results so the leaderboard and multi-device access stay consistent.
-- **Queue with retry** — failed or deferred uploads are not lost; they are retried on the next sync cycle instead of requiring the user to resubmit.
-
----
-
-## Security
-
-### Firestore rules (`firestore.rules`)
-
-
-| Collection         | Policy                                                                                                                             |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `users/{userId}`   | Users can read/write only their own profile; creation validates team name, members, and grade                                      |
-| `groups/{groupId}` | Authenticated read (leaderboard); create requires creator as first member or `isSeedData` flag; update restricted to group members |
-| All other paths    | Denied by default                                                                                                                  |
-
-
-### Client-side practices
-
-- Firebase config loaded from environment variables (`EXPO_PUBLIC_`*), not hardcoded secrets
-- Service account keys used only by the dev seed script and must never be committed (`.env` and key files are gitignored)
-- Auth persistence uses AsyncStorage via `initializeAuth` on native platforms
-- Grade-level validation enforced when joining groups
-
-### Permissions
-
-The app requests camera, microphone, and location permissions only for activities that need them. Usage descriptions are defined in `app.config.js`.
 
 ---
 

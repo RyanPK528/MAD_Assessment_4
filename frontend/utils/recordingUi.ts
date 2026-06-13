@@ -1,7 +1,7 @@
-export type RecordingUiState = 'idle' | 'countdown' | 'recording' | 'completed';
+export type RecordingUiState = 'idle' | 'countdown' | 'recording' | 'processing' | 'completed';
 
 export function isMonitoringPanelVisible(state: RecordingUiState): boolean {
-  return state === 'countdown' || state === 'recording' || state === 'completed';
+  return state === 'countdown' || state === 'recording' || state === 'processing' || state === 'completed';
 }
 
 export function isSensorFeedActive(state: RecordingUiState): boolean {

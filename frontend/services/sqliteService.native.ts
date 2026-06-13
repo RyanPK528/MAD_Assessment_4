@@ -99,3 +99,23 @@ export async function markRecordFailed(id: number): Promise<void> {
     id,
   );
 }
+
+/** Re-queue a failed sync with a future due time (retry backoff). */
+export async function markRecordRetry(id: number, backoffMs: number): Promise<void> {
+  const now = Date.now();
+  const database = getDb();
+  await database.runAsync(
+    `UPDATE offline_sync_queue SET status = 'pending', updatedAt = ?, dueTimestamp = ? WHERE id = ?;`,
+    now,
+    now + backoffMs,
+    id,
+  );
+}
+
+export async function getPendingSyncCount(): Promise<number> {
+  const database = getDb();
+  const row = await database.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) AS count FROM offline_sync_queue WHERE status = 'pending';`,
+  );
+  return row?.count ?? 0;
+}

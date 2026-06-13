@@ -19,6 +19,7 @@ import {
 import { getUserProfile } from '@/services/authService';
 import { useBatteryStatus } from '@/services/batteryService';
 import { AdBannerView } from '@/services/adService';
+import { getPendingSyncCount } from '@/services/sqliteService';
 import { Layout, SpacingScale } from '@/constants/theme';
 
 export default function DashboardScreen() {
@@ -29,9 +30,12 @@ export default function DashboardScreen() {
   const [currentGroup, setCurrentGroup] = useState<Awaited<ReturnType<typeof fetchCurrentGroupStats>>>(null);
   const [leaderboardPreview, setLeaderboardPreview] = useState<{ rank: number; name: string; score: number }[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [pendingSyncCount, setPendingSyncCount] = useState(0);
 
   const load = useCallback(async () => {
     await syncPendingResults();
+    const pendingCount = await getPendingSyncCount();
+    setPendingSyncCount(pendingCount);
     const auth = getFirebaseAuth();
     if (auth && isFirebaseConfigured()) {
       const user = auth.currentUser;
@@ -95,6 +99,13 @@ export default function DashboardScreen() {
         <ThemedText type="metadata" themeColor="textSecondary">
           {completedActivities} of {activitiesTotal} STEMM challenges finished
         </ThemedText>
+        {pendingSyncCount > 0 ? (
+          <ThemedText type="caption" themeColor="warning" style={styles.pendingBadge}>
+            {pendingSyncCount === 1
+              ? '1 upload pending — will sync when online'
+              : `${pendingSyncCount} uploads pending — will sync when online`}
+          </ThemedText>
+        ) : null}
       </AppCard>
 
       <View>
@@ -179,5 +190,8 @@ const styles = StyleSheet.create({
   },
   teamName: {
     flex: 1,
+  },
+  pendingBadge: {
+    marginTop: SpacingScale.xs,
   },
 });

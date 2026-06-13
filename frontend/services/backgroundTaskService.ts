@@ -1,40 +1,49 @@
 /**
  * Background Task Service
  * Uses expo-task-manager + expo-background-fetch for periodic background work.
- * Example: syncing pending activity results when the app is backgrounded.
+ * Syncs pending activity results when the app is backgrounded or the OS wakes the app.
  */
-import * as TaskManager from 'expo-task-manager';
 import * as BackgroundFetch from 'expo-background-fetch';
+import * as TaskManager from 'expo-task-manager';
+import { AppState, type AppStateStatus } from 'react-native';
 
-// ─── Task name constant (must be unique across your app) ─────────────────────
 export const BACKGROUND_SYNC_TASK = 'STEMM_LAB_BACKGROUND_SYNC';
 
-/**
- * Define the background task.
- * This MUST be called at module-level (outside any component) so it's
- * registered before the app mounts. Place the import of this file in
- * your app/_layout.tsx or app entry.
- */
+async function runBackgroundSync(): Promise<number> {
+  const { syncPendingResults } = await import('@/services/activityResultService');
+  return syncPendingResults();
+}
+
 TaskManager.defineTask(BACKGROUND_SYNC_TASK, async () => {
   try {
-    // Perform lightweight background work here (e.g. sync pending results)
-    const { syncPendingResults } = await import('@/services/activityResultService');
-    await syncPendingResults();
+    const synced = await runBackgroundSync();
 
-    // Return success so the OS knows the task completed
-    return BackgroundFetch.BackgroundFetchResult.NewData;
+    if (synced > 0) {
+      try {
+        const { scheduleLocalNotification } = await import('@/services/notificationService');
+        await scheduleLocalNotification(
+          'STEMM Lab',
+          synced === 1 ? '1 attempt synced to the cloud.' : `${synced} attempts synced to the cloud.`,
+        );
+      } catch {
+        // Notification optional
+      }
+    }
+
+    return synced > 0
+      ? BackgroundFetch.BackgroundFetchResult.NewData
+      : BackgroundFetch.BackgroundFetchResult.NoData;
   } catch {
     return BackgroundFetch.BackgroundFetchResult.Failed;
   }
 });
 
-/**
- * Register the background fetch schedule.
- * Call this once during app initialization (e.g. in RootLayout useEffect).
- *
- * @param minimumIntervalSec - Minimum interval between fetches (default 15 min)
- */
 export async function registerBackgroundSync(minimumIntervalSec = 900): Promise<void> {
+  const status = await BackgroundFetch.getStatusAsync();
+  if (status !== BackgroundFetch.BackgroundFetchStatus.Available) {
+    return;
+  }
+
   const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
   if (isRegistered) return;
 
@@ -45,9 +54,6 @@ export async function registerBackgroundSync(minimumIntervalSec = 900): Promise<
   });
 }
 
-/**
- * Unregister the background task (e.g. on logout).
- */
 export async function unregisterBackgroundSync(): Promise<void> {
   const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_SYNC_TASK);
   if (isRegistered) {
@@ -55,9 +61,6 @@ export async function unregisterBackgroundSync(): Promise<void> {
   }
 }
 
-/**
- * Check current background fetch status for debugging.
- */
 export async function getBackgroundFetchStatus(): Promise<string> {
   const status = await BackgroundFetch.getStatusAsync();
   switch (status) {
@@ -70,4 +73,29 @@ export async function getBackgroundFetchStatus(): Promise<string> {
     default:
       return 'unknown';
   }
+}
+
+let appStateSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
+
+/** Sync pending results whenever the app returns to the foreground. */
+export function registerForegroundSyncListener(): () => void {
+  if (appStateSubscription) {
+    appStateSubscription.remove();
+  }
+
+  appStateSubscription = AppState.addEventListener('change', (nextState: AppStateStatus) => {
+    if (nextState === 'active') {
+      void runBackgroundSync();
+    }
+  });
+
+  return () => {
+    appStateSubscription?.remove();
+    appStateSubscription = null;
+  };
+}
+
+export async function initializeBackgroundSync(): Promise<() => void> {
+  await registerBackgroundSync();
+  return registerForegroundSyncListener();
 }

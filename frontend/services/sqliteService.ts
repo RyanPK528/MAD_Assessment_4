@@ -11,4 +11,6 @@ export {
   getDueSyncRecords,
   markRecordSynced,
   markRecordFailed,
+  markRecordRetry,
+  getPendingSyncCount,
 } from './sqliteService.native';

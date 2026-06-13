@@ -4,18 +4,88 @@ import {
   BreathingPhaseResult,
   BreathingRecordingMetrics,
   CHART_DISPLAY_SAMPLES,
+  CYCLE_PROMINENCE_RATIO,
+  HIGH_PASS_BASELINE_WINDOW_SAMPLES,
   MAX_BREATHING_PHASES,
+  MIN_PEAK_DISTANCE_SAMPLES,
+  PEAK_CONFIRMATION_LAG_SAMPLES,
+  PEAK_PROMINENCE_RATIO,
+  PEAK_PROMINENCE_WINDOW_SAMPLES,
+  PEAK_THRESHOLD_RATIO,
   RECORDING_DURATION_SEC,
+  WHITTAKER_ITERATIONS,
+  WHITTAKER_LAMBDA,
 } from './breathingTrainerTypes';
+import { yieldToEventLoop } from '../utils/cooperativeScheduling';
 
 export {
   BREATHING_PHASES,
+  CYCLE_PROMINENCE_RATIO,
+  HIGH_PASS_BASELINE_WINDOW_SAMPLES,
   MAX_BREATHING_PHASES,
+  MIN_PEAK_DISTANCE_SAMPLES,
+  PEAK_CONFIRMATION_LAG_SAMPLES,
+  PEAK_PROMINENCE_RATIO,
+  PEAK_PROMINENCE_WINDOW_SAMPLES,
+  PEAK_THRESHOLD_RATIO,
   RECORDING_DURATION_SEC,
   START_COUNTDOWN_SEC,
+  WHITTAKER_ITERATIONS,
+  WHITTAKER_LAMBDA,
 } from './breathingTrainerTypes';
 
-export function whittakerEilersSmooth(values: number[], lambda = 8, iterations = 6): number[] {
+export interface DetectBreathsOptions {
+  peakThresholdRatio?: number;
+  minPeakDistanceSamples?: number;
+  peakProminenceRatio?: number;
+  peakProminenceWindowSamples?: number;
+  cycleProminenceRatio?: number;
+  troughStartIndex?: number;
+  peakConfirmationLagSamples?: number;
+}
+
+export interface NewBreathPeaksResult {
+  newPeaks: number;
+  lastPeakIndex: number;
+}
+
+export function computeAccelMagnitude(x: number, y: number, z: number): number {
+  return Math.hypot(x, y, z);
+}
+
+export function highPassMovingBaseline(
+  values: number[],
+  windowSize = HIGH_PASS_BASELINE_WINDOW_SAMPLES,
+): number[] {
+  if (values.length === 0) {
+    return [];
+  }
+
+  return values.map((value, index) => {
+    const start = Math.max(0, index - windowSize + 1);
+    const window = values.slice(start, index + 1);
+    const baseline = window.reduce((sum, sample) => sum + sample, 0) / window.length;
+    return value - baseline;
+  });
+}
+
+export function filterBreathingMotionSamples(
+  motionSamples: number[],
+  windowSize = HIGH_PASS_BASELINE_WINDOW_SAMPLES,
+): number[] {
+  if (motionSamples.length === 0) {
+    return [];
+  }
+
+  const highPassed = highPassMovingBaseline(motionSamples, windowSize);
+  return whittakerEilersSmooth(highPassed);
+}
+
+export function whittakerEilersSmooth(
+  values: number[],
+  lambda = WHITTAKER_LAMBDA,
+  iterations = WHITTAKER_ITERATIONS,
+): number[] {
   if (values.length < 3) {
     return [...values];
   }
@@ -35,6 +105,31 @@ export function whittakerEilersSmooth(values: number[], lambda = 8, iterations =
   return smoothed;
 }
 
+export async function whittakerEilersSmoothAsync(
+  values: number[],
+  lambda = WHITTAKER_LAMBDA,
+  iterations = WHITTAKER_ITERATIONS,
+): Promise<number[]> {
+  if (values.length < 3) {
+    return [...values];
+  }
+
+  let smoothed = [...values];
+
+  for (let k = 0; k < iterations; k += 1) {
+    const next = [...smoothed];
+
+    for (let i = 1; i < values.length - 1; i += 1) {
+      next[i] = (values[i] + lambda * (smoothed[i - 1] + smoothed[i + 1])) / (1 + 2 * lambda);
+    }
+
+    smoothed = next;
+    await yieldToEventLoop();
+  }
+
+  return smoothed;
+}
+
 export function centerSignal(values: number[]): number[] {
   if (values.length === 0) {
     return [];
@@ -44,34 +139,244 @@ export function centerSignal(values: number[]): number[] {
   return values.map((value) => value - mean);
 }
 
-export function detectBreaths(values: number[]): number {
-  if (values.length < 3) {
+function getSignalAmplitude(values: number[]): number {
+  if (values.length === 0) {
     return 0;
   }
 
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const amplitude = max - min;
-  const threshold = amplitude * 0.15;
-  const minDistance = 7;
+  return Math.max(...values) - Math.min(...values);
+}
 
-  let breaths = 0;
-  let lastPeak = -minDistance;
+export function isBreathPeak(
+  values: number[],
+  index: number,
+  amplitude: number,
+  options: DetectBreathsOptions = {},
+): boolean {
+  if (index <= 0 || index >= values.length - 1 || amplitude <= 0) {
+    return false;
+  }
 
-  for (let i = 1; i < values.length - 1; i += 1) {
-    const prev = values[i - 1];
-    const current = values[i];
-    const next = values[i + 1];
-    const isPeak = current > prev && current > next && current > threshold;
-    const farEnough = i - lastPeak > minDistance;
+  const peakThresholdRatio = options.peakThresholdRatio ?? PEAK_THRESHOLD_RATIO;
+  const prominenceRatio = options.peakProminenceRatio ?? PEAK_PROMINENCE_RATIO;
+  const prominenceWindow = options.peakProminenceWindowSamples ?? PEAK_PROMINENCE_WINDOW_SAMPLES;
+  const cycleProminenceRatio = options.cycleProminenceRatio ?? CYCLE_PROMINENCE_RATIO;
 
-    if (isPeak && farEnough) {
-      breaths += 1;
-      lastPeak = i;
+  const prev = values[index - 1];
+  const current = values[index];
+  const next = values[index + 1];
+  const threshold = amplitude * peakThresholdRatio;
+  const isLocalMax =
+    current >= prev && current >= next && (current > prev || current > next);
+
+  if (!(isLocalMax && current > threshold)) {
+    return false;
+  }
+
+  if (options.troughStartIndex !== undefined && cycleProminenceRatio > 0) {
+    const troughStart = Math.max(0, options.troughStartIndex);
+    let troughSinceLast = current;
+
+    for (let j = troughStart; j <= index; j += 1) {
+      troughSinceLast = Math.min(troughSinceLast, values[j] ?? current);
+    }
+
+    const cycleProminence = current - troughSinceLast;
+    return cycleProminence >= amplitude * cycleProminenceRatio;
+  }
+
+  const windowStart = Math.max(0, index - prominenceWindow);
+  const windowEnd = Math.min(values.length - 1, index + prominenceWindow);
+  let localMin = current;
+
+  for (let j = windowStart; j <= windowEnd; j += 1) {
+    localMin = Math.min(localMin, values[j] ?? current);
+  }
+
+  const prominence = current - localMin;
+  return prominence >= amplitude * prominenceRatio;
+}
+
+export function isDominantBreathPeak(
+  values: number[],
+  index: number,
+  halfWindow: number,
+): boolean {
+  if (index <= 0 || index >= values.length - 1) {
+    return false;
+  }
+
+  const current = values[index] ?? 0;
+  const windowStart = Math.max(0, index - halfWindow);
+  const windowEnd = Math.min(values.length - 1, index + halfWindow);
+  let windowMax = current;
+
+  for (let j = windowStart; j <= windowEnd; j += 1) {
+    windowMax = Math.max(windowMax, values[j] ?? Number.NEGATIVE_INFINITY);
+  }
+
+  return current >= windowMax;
+}
+
+function findStrongestPeakInRange(
+  values: number[],
+  rangeStart: number,
+  rangeEnd: number,
+  amplitude: number,
+  options: DetectBreathsOptions,
+  troughStartIndex: number,
+): number | null {
+  const minDistance = options.minPeakDistanceSamples ?? MIN_PEAK_DISTANCE_SAMPLES;
+  const halfWindow = Math.floor(minDistance / 2);
+  let bestIndex: number | null = null;
+  let bestValue = Number.NEGATIVE_INFINITY;
+
+  for (let i = rangeStart; i <= rangeEnd; i += 1) {
+    const peakOptions: DetectBreathsOptions = {
+      ...options,
+      troughStartIndex,
+    };
+
+    if (
+      isBreathPeak(values, i, amplitude, peakOptions) &&
+      isDominantBreathPeak(values, i, halfWindow) &&
+      (values[i] ?? Number.NEGATIVE_INFINITY) > bestValue
+    ) {
+      bestValue = values[i] ?? Number.NEGATIVE_INFINITY;
+      bestIndex = i;
     }
   }
 
-  return breaths;
+  return bestIndex;
+}
+
+function findNextBreathPeakIndex(
+  values: number[],
+  searchStart: number,
+  maxIndex: number,
+  lastPeakIndex: number,
+  amplitude: number,
+  options: DetectBreathsOptions,
+): number | null {
+  const minDistance = options.minPeakDistanceSamples ?? MIN_PEAK_DISTANCE_SAMPLES;
+  const troughStartIndex = Math.max(0, lastPeakIndex);
+
+  for (let i = searchStart; i <= maxIndex; i += 1) {
+    if (i - lastPeakIndex <= minDistance) {
+      continue;
+    }
+
+    const lookEnd = Math.min(maxIndex, i + minDistance);
+    const peakIndex = findStrongestPeakInRange(
+      values,
+      i,
+      lookEnd,
+      amplitude,
+      options,
+      troughStartIndex,
+    );
+
+    if (peakIndex !== null) {
+      return peakIndex;
+    }
+  }
+
+  return null;
+}
+
+export function findBreathPeakIndices(values: number[], options: DetectBreathsOptions = {}): number[] {
+  if (values.length < 3) {
+    return [];
+  }
+
+  const minDistance = options.minPeakDistanceSamples ?? MIN_PEAK_DISTANCE_SAMPLES;
+  const lag = options.peakConfirmationLagSamples ?? PEAK_CONFIRMATION_LAG_SAMPLES;
+  const maxIndex = values.length - 1 - lag;
+
+  if (maxIndex < 1) {
+    return [];
+  }
+
+  const amplitude = getSignalAmplitude(values);
+  const peaks: number[] = [];
+  let lastPeak = -minDistance;
+  let searchStart = 1;
+
+  while (searchStart <= maxIndex) {
+    const peakIndex = findNextBreathPeakIndex(
+      values,
+      searchStart,
+      maxIndex,
+      lastPeak,
+      amplitude,
+      options,
+    );
+
+    if (peakIndex === null) {
+      break;
+    }
+
+    peaks.push(peakIndex);
+    lastPeak = peakIndex;
+    searchStart = peakIndex + 1;
+  }
+
+  return peaks;
+}
+
+export function countNewBreathPeaks(
+  filtered: number[],
+  afterSampleIndex: number,
+  options: DetectBreathsOptions = {},
+): NewBreathPeaksResult {
+  if (filtered.length < 3) {
+    return { newPeaks: 0, lastPeakIndex: afterSampleIndex };
+  }
+
+  const lag = options.peakConfirmationLagSamples ?? PEAK_CONFIRMATION_LAG_SAMPLES;
+  const maxIndex = filtered.length - 1 - lag;
+
+  if (maxIndex < 1) {
+    return { newPeaks: 0, lastPeakIndex: afterSampleIndex };
+  }
+
+  const amplitude = getSignalAmplitude(filtered);
+  let lastAcceptedIndex = afterSampleIndex;
+  let newPeaks = 0;
+  let searchStart = Math.max(1, afterSampleIndex + 1);
+
+  while (searchStart <= maxIndex) {
+    const peakIndex = findNextBreathPeakIndex(
+      filtered,
+      searchStart,
+      maxIndex,
+      lastAcceptedIndex,
+      amplitude,
+      options,
+    );
+
+    if (peakIndex === null) {
+      break;
+    }
+
+    newPeaks += 1;
+    lastAcceptedIndex = peakIndex;
+    searchStart = peakIndex + 1;
+  }
+
+  return {
+    newPeaks,
+    lastPeakIndex: newPeaks > 0 ? lastAcceptedIndex : afterSampleIndex,
+  };
+}
+
+export function detectBreathCycles(values: number[], options: DetectBreathsOptions = {}): number {
+  return findBreathPeakIndices(values, options).length;
+}
+
+/** @deprecated Use detectBreathCycles */
+export function detectBreaths(values: number[], options: DetectBreathsOptions = {}): number {
+  return detectBreathCycles(values, options);
 }
 
 export function computeBreathsPerMinute(breathCount: number, durationSec: number): number {
@@ -104,30 +409,63 @@ export function downsampleSignal(values: number[], targetLength = CHART_DISPLAY_
 }
 
 export function analyzeBreathingSignalLive(
-  zSamples: number[],
+  motionSamples: number[],
   elapsedSec: number,
 ): BreathingRecordingMetrics {
-  return analyzeBreathingSignal(zSamples, Math.max(1, elapsedSec));
+  return analyzeBreathingSignal(motionSamples, Math.max(1, elapsedSec));
 }
 
 export function analyzeBreathingSignal(
-  zSamples: number[],
+  motionSamples: number[],
   durationSec = RECORDING_DURATION_SEC,
 ): BreathingRecordingMetrics {
-  const smoothed = whittakerEilersSmooth(zSamples);
-  const centered = centerSignal(smoothed);
-  const breathCount = detectBreaths(centered);
+  const filtered = filterBreathingMotionSamples(motionSamples);
+  const breathCount = detectBreathCycles(filtered);
   const breathsPerMinute = computeBreathsPerMinute(breathCount, durationSec);
   const peakAmplitude =
-    centered.length === 0 ? 0 : Math.max(...centered.map(Math.abs));
+    filtered.length === 0 ? 0 : Math.max(...filtered.map(Math.abs));
 
   return {
     breathCount,
     breathsPerMinute,
     durationSec,
-    centeredSignal: downsampleSignal(centered),
+    centeredSignal: downsampleSignal(filtered),
     peakAmplitude,
-    sampleCount: zSamples.length,
+    sampleCount: motionSamples.length,
+  };
+}
+
+export async function analyzeBreathingSignalAsync(
+  motionSamples: number[],
+  durationSec = RECORDING_DURATION_SEC,
+): Promise<BreathingRecordingMetrics> {
+  const highPassed = highPassMovingBaseline(motionSamples);
+  const filtered = await whittakerEilersSmoothAsync(highPassed);
+  const breathCount = detectBreathCycles(filtered);
+  const breathsPerMinute = computeBreathsPerMinute(breathCount, durationSec);
+  const peakAmplitude =
+    filtered.length === 0 ? 0 : Math.max(...filtered.map(Math.abs));
+
+  return {
+    breathCount,
+    breathsPerMinute,
+    durationSec,
+    centeredSignal: downsampleSignal(filtered),
+    peakAmplitude,
+    sampleCount: motionSamples.length,
+  };
+}
+
+export function buildAuthoritativeMetrics(
+  chartMetrics: BreathingRecordingMetrics,
+  authoritativeBreathCount: number,
+  durationSec: number,
+): BreathingRecordingMetrics {
+  return {
+    ...chartMetrics,
+    breathCount: authoritativeBreathCount,
+    breathsPerMinute: computeBreathsPerMinute(authoritativeBreathCount, durationSec),
+    durationSec,
   };
 }
 

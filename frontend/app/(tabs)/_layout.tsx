@@ -1,12 +1,15 @@
 import { Tabs } from 'expo-router';
-import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppIcon } from '@/components/ui/app-icon';
-import { SpacingScale, Typography } from '@/constants/theme';
+import { Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getBottomTabInset, getTabBarTotalHeight, TAB_BAR_ITEM_BOTTOM_GAP } from '@/utils/safeArea';
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const bottomInset = getBottomTabInset(insets);
 
   return (
     <Tabs
@@ -18,9 +21,9 @@ export default function TabsLayout() {
           backgroundColor: theme.surface,
           borderTopColor: theme.border,
           borderTopWidth: 1,
-          height: Platform.select({ ios: 84, default: 72 }),
-          paddingBottom: Platform.select({ ios: SpacingScale.lg, default: SpacingScale.sm }),
-          paddingTop: SpacingScale.xs,
+          height: getTabBarTotalHeight(insets),
+          paddingBottom: bottomInset + TAB_BAR_ITEM_BOTTOM_GAP,
+          paddingTop: 0,
         },
         tabBarLabelStyle: {
           fontSize: Typography.metadata.fontSize,
